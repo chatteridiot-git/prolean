@@ -1,0 +1,168 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: prolean-postgres
+    environment:
+      POSTGRES_USER: prolean
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prolean}
+      POSTGRES_DB: postgres
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-auth_service}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:-user_service}
+      TASK_DB_PASSWORD: ${TASK_DB_PASSWORD:-task_service}
+      TIMELINE_DB_PASSWORD: ${TIMELINE_DB_PASSWORD:-timeline_service}
+    ports:
+      - "5432:5432"
+    volumes:
+      - prolean-pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prolean -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE: auth-service
+    environment:
+      SERVER_PORT: 8081
+      DB_URL: jdbc:postgresql://postgres:5432/auth_db
+      DB_USERNAME: auth_service
+      DB_PASSWORD: ${AUTH_DB_PASSWORD:-auth_service}
+      AUTH_JWT_KEY_ID: ${AUTH_JWT_KEY_ID:-compose-2026-10}
+      AUTH_ACCESS_TOKEN_TTL_SECONDS: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:-900}
+      AUTH_REFRESH_TOKEN_TTL_DAYS: ${AUTH_REFRESH_TOKEN_TTL_DAYS:-7}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
+      BOOTSTRAP_ADMIN_FULL_NAME: ${BOOTSTRAP_ADMIN_FULL_NAME:-System Administrator}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-ChangeMe123!}
+      USER_SERVICE_URL: http://user-service:8082
+      INTERNAL_KEY_AUTH_SERVICE: ${INTERNAL_KEY_AUTH_SERVICE:-dev-auth-service-key}
+      INTERNAL_KEY_USER_SERVICE: ${INTERNAL_KEY_USER_SERVICE:-dev-user-service-key}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173,http://localhost:8080}
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health/readiness | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  user-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE: user-service
+    environment:
+      SERVER_PORT: 8082
+      DB_URL: jdbc:postgresql://postgres:5432/user_db
+      DB_USERNAME: user_service
+      DB_PASSWORD: ${USER_DB_PASSWORD:-user_service}
+      AUTH_JWKS_URI: http://auth-service:8081/.well-known/jwks.json
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INTERNAL_KEY_AUTH_SERVICE: ${INTERNAL_KEY_AUTH_SERVICE:-dev-auth-service-key}
+      INTERNAL_KEY_USER_SERVICE: ${INTERNAL_KEY_USER_SERVICE:-dev-user-service-key}
+      INTERNAL_KEY_TASK_SERVICE: ${INTERNAL_KEY_TASK_SERVICE:-dev-task-service-key}
+      INTERNAL_KEY_TIMELINE_SERVICE: ${INTERNAL_KEY_TIMELINE_SERVICE:-dev-timeline-service-key}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173,http://localhost:8080}
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health/readiness | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  task-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE: task-service
+    environment:
+      SERVER_PORT: 8083
+      DB_URL: jdbc:postgresql://postgres:5432/task_db
+      DB_USERNAME: task_service
+      DB_PASSWORD: ${TASK_DB_PASSWORD:-task_service}
+      AUTH_JWKS_URI: http://auth-service:8081/.well-known/jwks.json
+      USER_SERVICE_URL: http://user-service:8082
+      INTERNAL_KEY_TASK_SERVICE: ${INTERNAL_KEY_TASK_SERVICE:-dev-task-service-key}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173,http://localhost:8080}
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/actuator/health/readiness | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  timeline-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE: timeline-service
+    environment:
+      SERVER_PORT: 8084
+      DB_URL: jdbc:postgresql://postgres:5432/timeline_db
+      DB_USERNAME: timeline_service
+      DB_PASSWORD: ${TIMELINE_DB_PASSWORD:-timeline_service}
+      AUTH_JWKS_URI: http://auth-service:8081/.well-known/jwks.json
+      USER_SERVICE_URL: http://user-service:8082
+      INTERNAL_KEY_TIMELINE_SERVICE: ${INTERNAL_KEY_TIMELINE_SERVICE:-dev-timeline-service-key}
+      TIMELINE_ZONE: Asia/Jakarta
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173,http://localhost:8080}
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health/readiness | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: prolean-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      auth-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      task-service:
+        condition: service_started
+      timeline-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  prolean-pgdata:

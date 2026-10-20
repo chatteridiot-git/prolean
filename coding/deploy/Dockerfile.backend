@@ -1,0 +1,18 @@
+# Build the service jar first:
+#   cd coding/backend && mvn -B -DskipTests package
+# Then build this image with the coding/ directory as the context.
+FROM eclipse-temurin:21-jre
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG SERVICE
+WORKDIR /app
+COPY ${SERVICE}/target/${SERVICE}-1.0.0-SNAPSHOT.jar app.jar
+
+RUN useradd --system --uid 10001 prolean
+USER 10001
+
+EXPOSE 8081 8082 8083 8084
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]
