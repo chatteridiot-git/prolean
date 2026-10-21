@@ -96,3 +96,27 @@ Not required for the approved v1. Docker Compose is the deployment target. Optio
 **APPROVED.** JDK 21, Maven, Node/npm, PostgreSQL 16, Docker 29.5.3, and Docker Compose v5.6.0 are installed and verified. The approved design can be implemented and tested. Kubernetes is intentionally out of scope for v1.
 
 `@coder` may start with milestone M1 in `coding/`.
+
+## Re-check — current workstation, 21 October 2026
+
+The workspace was moved to `/home/kiekie/Documents/workspace/opencode-projects/prolean`. The implementation is complete through milestone M5, so this re-check only re-provisions the toolchain needed to run the release gates on the new host. The approval above remains in force.
+
+| Tool | Version | Status | Notes |
+|---|---|---|---|
+| JDK | 21.0.12.1 LTS (Ubuntu OpenJDK) | PASS | `/usr/lib/jvm/java-21-openjdk-amd64` |
+| Maven | 3.9.11 | PASS | Installed under `~/.local/opt/maven`, linked in `~/.local/bin` |
+| Node.js | 22.23.4 | PASS | Installed under `~/.local/opt/node`, linked in `~/.local/bin` |
+| npm | 10.9.9 | PASS | |
+| Docker engine | 29.5.3 | PASS | Docker Desktop, user service `docker-desktop` |
+| Docker Compose | v5.1.4 | PASS | Plugin bundled with Docker Desktop |
+| Docker socket | `~/.docker/desktop/docker.sock` | PASS | `DOCKER_HOST` set to this socket for Maven/Testcontainers |
+| `jq` / `curl` | installed | PASS | Required by `coding/deploy/smoke.sh` |
+| `psql` client | not installed | NOTE | `coding/scripts/db-check.sh` requires it; run it where the client exists or install `postgresql-client` |
+| kubectl / Minikube / Kind | not installed | OPTIONAL | Kubernetes remains out of scope for v1 |
+
+Operational notes:
+
+- `export PATH="$HOME/.local/bin:$PATH"` is required in a fresh shell.
+- Testcontainers must see `DOCKER_HOST=unix://$HOME/.docker/desktop/docker.sock`; do not set `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` on this host because the socket is not at `/var/run/docker.sock`.
+- If Docker Desktop is not running: `systemctl --user start docker-desktop`, then confirm with `docker version`.
+- The native PostgreSQL wrappers described above are still not usable; the Compose PostgreSQL service owns the release-gate database.
