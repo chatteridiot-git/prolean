@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { timelineApi } from '@/api/client';
 import { problemCode } from '@/lib/errors';
 import { queryKeys } from '@/lib/queryKeys';
+import { useIdempotencyKey } from '@/lib/requestId';
 import type {
   PageResponse,
   TimelineAggregate,
@@ -34,7 +35,7 @@ export function useTimelineVersions(projectId: string, page: number) {
     queryFn: async () => {
       const { data } = await timelineApi.get<PageResponse<TimelineVersion>>(
         `/api/v1/projects/${projectId}/timeline/versions`,
-        { params: { page, size: 10, sort: 'versionNumber,desc' } },
+        { params: { page, size: 50, sort: 'versionNumber,desc' } },
       );
       return data;
     },
@@ -43,23 +44,26 @@ export function useTimelineVersions(projectId: string, page: number) {
 
 function useTimelineMutation<TVariables>(
   projectId: string,
-  mutationFn: (variables: TVariables) => Promise<unknown>,
+  mutationFn: (variables: TVariables, requestId: string) => Promise<unknown>,
 ) {
   const queryClient = useQueryClient();
+  const requestId = useIdempotencyKey();
   return useMutation({
-    mutationFn,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'timeline'] }),
+    mutationFn: (variables: TVariables) => mutationFn(variables, requestId.get()),
+    onSuccess: () => {
+      requestId.reset();
+      return queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'timeline'] });
+    },
   });
 }
 
 export function useCreateTimeline(projectId: string) {
   return useTimelineMutation(
     projectId,
-    async (input: { startDate: string; endDate: string; revisionNotes?: string }) => {
+    async (input: { startDate: string; endDate: string; revisionNotes?: string }, requestId) => {
       const { data } = await timelineApi.post<TimelineVersion>(
         `/api/v1/projects/${projectId}/timeline`,
-        { ...input, requestId: crypto.randomUUID() },
+        { ...input, requestId },
       );
       return data;
     },
@@ -98,10 +102,10 @@ export function usePublishTimeline(projectId: string) {
     async (input: {
       expectedDraftUpdatedAt: string;
       expectedCurrentUpdatedAt?: string;
-    }) => {
+    }, requestId) => {
       const { data } = await timelineApi.post<TimelineVersion>(
         `/api/v1/projects/${projectId}/timeline/draft/publish`,
-        { ...input, requestId: crypto.randomUUID() },
+        { ...input, requestId },
       );
       return data;
     },
@@ -111,10 +115,10 @@ export function usePublishTimeline(projectId: string) {
 export function useCreateTimelineRevision(projectId: string) {
   return useTimelineMutation(
     projectId,
-    async (input: { startDate?: string; endDate?: string; revisionNotes?: string }) => {
+    async (input: { startDate?: string; endDate?: string; revisionNotes?: string }, requestId) => {
       const { data } = await timelineApi.post<TimelineVersion>(
         `/api/v1/projects/${projectId}/timeline/revisions`,
-        { ...input, requestId: crypto.randomUUID() },
+        { ...input, requestId },
       );
       return data;
     },

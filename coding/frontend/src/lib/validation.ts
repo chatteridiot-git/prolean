@@ -107,10 +107,6 @@ export const timelineSchema = z
   .refine((data) => data.endDate >= data.startDate, {
     message: 'End date must be on or after start date',
     path: ['endDate'],
-  })
-  .refine((data) => data.startDate >= '2025-01-01' && data.endDate <= '2027-12-31', {
-    message: 'Dates must be within the covered holiday horizon (2025–2027)',
-    path: ['startDate'],
   });
 export type TimelineValues = z.infer<typeof timelineSchema>;
 

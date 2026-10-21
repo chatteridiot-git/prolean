@@ -28,6 +28,7 @@ describe('refreshSession', () => {
     resetRefreshForTests();
     localStorage.clear();
     vi.useRealTimers();
+    vi.stubGlobal('BroadcastChannel', undefined);
   });
 
   afterEach(() => {
@@ -59,7 +60,7 @@ describe('refreshSession', () => {
 
     const first = refreshSession();
     const second = refreshSession();
-    expect(post).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     resolvePost({ data: { accessToken: 'shared' } });
     await expect(first).resolves.toEqual(user);
     await expect(second).resolves.toEqual(user);
@@ -90,7 +91,7 @@ describe('refreshSession', () => {
     expect(localStorage.getItem(LOCK_KEY)).toBeNull();
   });
 
-  it('waits for a held lock and does not remove another owner lock', async () => {
+  it('fails closed and leaves another owner lock in place when the lease never expires', async () => {
     vi.useFakeTimers();
     localStorage.setItem(
       LOCK_KEY,
@@ -99,8 +100,10 @@ describe('refreshSession', () => {
     success();
 
     const pending = refreshSession();
+    const rejection = expect(pending).rejects.toThrow('Timed out waiting for the cross-tab refresh lock');
     await vi.advanceTimersByTimeAsync(10_100);
-    await expect(pending).resolves.toEqual(user);
+    await rejection;
+    expect(post).not.toHaveBeenCalled();
     expect(JSON.parse(localStorage.getItem(LOCK_KEY) ?? '{}').owner).toBe('other-tab');
   });
 
@@ -131,6 +134,154 @@ describe('refreshSession', () => {
     success();
     await refreshSession();
     expect(localStorage.getItem(LOCK_KEY)).toBeNull();
+  });
+
+  it('uses the BroadcastChannel fallback when Web Locks is unavailable', async () => {
+    const messages: Array<{ type: string }> = [];
+    let reannounced = false;
+    class FakeChannel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      postMessage = vi.fn((message: { type: string; id: string }) => {
+        messages.push(message);
+        if (message.type === 'probe') {
+          this.onmessage?.({ data: undefined } as MessageEvent);
+        } else if (message.type === 'start' && !reannounced) {
+          reannounced = true;
+          this.onmessage?.({ data: { type: 'probe', id: 'new-tab' } } as MessageEvent);
+          this.onmessage?.({ data: { type: 'probe', id: message.id } } as MessageEvent);
+        }
+      });
+      close = vi.fn();
+    }
+    vi.stubGlobal('BroadcastChannel', FakeChannel);
+    success();
+
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(messages.map((message) => message.type)).toEqual(['probe', 'start', 'start', 'done']);
+  });
+
+  it('waits for a busy peer and falls through when it left no session', async () => {
+    class PeerChannel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      postMessage = vi.fn((message: { type: string }) => {
+        if (message.type !== 'probe') return;
+        this.onmessage?.({ data: { type: 'start', id: 'peer' } } as MessageEvent);
+        setTimeout(
+          () => this.onmessage?.({ data: { type: 'done', id: 'peer' } } as MessageEvent),
+          120,
+        );
+      });
+      close = vi.fn();
+    }
+    vi.stubGlobal('BroadcastChannel', PeerChannel);
+    success();
+
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for a peer start/done pair and then refreshes', async () => {
+    const messages: Array<{ type: string }> = [];
+    class PeerChannel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      postMessage = vi.fn((message: { type: string }) => {
+        messages.push(message);
+        if (message.type !== 'probe') return;
+        this.onmessage?.({ data: { type: 'probe', id: 'early-tab' } } as MessageEvent);
+        this.onmessage?.({ data: { type: 'start', id: 'peer' } } as MessageEvent);
+        this.onmessage?.({ data: { type: 'busy', id: 'other-waiter' } } as MessageEvent);
+        this.onmessage?.({ data: { type: 'probe', id: 'late-tab' } } as MessageEvent);
+        setTimeout(
+          () => this.onmessage?.({ data: { type: 'done', id: 'peer' } } as MessageEvent),
+          100,
+        );
+      });
+      close = vi.fn();
+    }
+    vi.stubGlobal('BroadcastChannel', PeerChannel);
+    success();
+
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(messages.filter((message) => message.type === 'start')).toHaveLength(1);
+  });
+
+  it('never replies to a busy message', async () => {
+    const messages: Array<{ type: string }> = [];
+    class BusyEchoChannel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      postMessage = vi.fn((message: { type: string }) => {
+        messages.push(message);
+        if (message.type === 'probe') {
+          this.onmessage?.({ data: { type: 'busy', id: 'peer' } } as MessageEvent);
+          setTimeout(
+            () => this.onmessage?.({ data: { type: 'done', id: 'peer' } } as MessageEvent),
+            10,
+          );
+        }
+      });
+      close = vi.fn();
+    }
+    vi.stubGlobal('BroadcastChannel', BusyEchoChannel);
+    success();
+
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(messages.filter((message) => message.type === 'busy')).toHaveLength(0);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the session broadcast by a peer that holds the fallback lock', async () => {
+    class PeerChannel {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      postMessage = vi.fn((message: { type: string }) => {
+        if (message.type !== 'probe') return;
+        this.onmessage?.({ data: { type: 'start', id: 'peer' } } as MessageEvent);
+        setTimeout(() => this.onmessage?.({ data: { type: 'done', id: 'peer' } } as MessageEvent), 120);
+      });
+      close = vi.fn();
+    }
+    vi.stubGlobal('BroadcastChannel', PeerChannel);
+    sessionStore.set({ accessToken: 'already-refreshed', user });
+
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(post).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('treats a corrupt lease as absent', async () => {
+    localStorage.setItem(LOCK_KEY, 'not-json');
+    success();
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(localStorage.getItem(LOCK_KEY)).toBeNull();
+  });
+
+  it('treats a malformed lease as absent', async () => {
+    localStorage.setItem(LOCK_KEY, JSON.stringify({ owner: 7, expiresAt: 'later' }));
+    success();
+    await expect(refreshSession()).resolves.toEqual(user);
+    expect(localStorage.getItem(LOCK_KEY)).toBeNull();
+  });
+
+  it('fails closed when a peer never finishes refreshing', async () => {
+    vi.useFakeTimers();
+    class StuckPeer {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      postMessage = vi.fn((message: { type: string }) => {
+        if (message.type === 'probe') {
+          this.onmessage?.({ data: { type: 'start', id: 'stuck' } } as MessageEvent);
+        }
+      });
+      close = vi.fn();
+    }
+    vi.stubGlobal('BroadcastChannel', StuckPeer);
+
+    const pending = refreshSession();
+    const rejection = expect(pending).rejects.toThrow(
+      'Timed out waiting for another tab to finish refreshing',
+    );
+    await vi.advanceTimersByTimeAsync(5_100);
+    await rejection;
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('does not remove lock in finally when owner differs', async () => {

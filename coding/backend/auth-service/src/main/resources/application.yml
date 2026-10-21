@@ -42,8 +42,10 @@ management:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: ${OPENAPI_ENABLED:true}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${OPENAPI_ENABLED:true}
 
 prolean:
   auth:
@@ -53,20 +55,22 @@ prolean:
     retired-public-keys: ${JWT_RETIRED_PUBLIC_KEYS:[]}
     access-token-ttl-seconds: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-days: ${AUTH_REFRESH_TOKEN_TTL_DAYS:7}
+    cookie-secure: ${AUTH_COOKIE_SECURE:false}
     bootstrap-username: ${BOOTSTRAP_ADMIN_USERNAME:admin}
     bootstrap-email: ${BOOTSTRAP_ADMIN_EMAIL:admin@example.com}
     bootstrap-full-name: ${BOOTSTRAP_ADMIN_FULL_NAME:System Administrator}
     bootstrap-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+    allow-credentials: true
   internal:
     callers:
       user-service-2026-10:
-        secret: ${INTERNAL_KEY_USER_SERVICE:dev-user-service-key}
+        secret: ${INTERNAL_KEY_USER_SERVICE:dev-user-service-key-0123456789abcdef}
         scopes:
           - "POST /internal/users/*/revoke-tokens"
   services:
     user:
       base-url: ${USER_SERVICE_URL:http://localhost:8082}
       internal-key-id: auth-service-2026-10
-      internal-api-key: ${INTERNAL_KEY_AUTH_SERVICE:dev-auth-service-key}
+      internal-api-key: ${INTERNAL_KEY_AUTH_SERVICE:dev-auth-service-key-0123456789abcdef}

@@ -34,7 +34,12 @@ public record CurrentUser(UUID id, String username, String fullName, Set<String>
         }
         List<String> roleValues = jwt.getClaimAsStringList(JwtSupport.ROLES_CLAIM);
         Set<String> roles = roleValues == null ? Set.of() : new LinkedHashSet<>(roleValues);
-        return new CurrentUser(id, jwt.getClaimAsString("username"), jwt.getClaimAsString("fullName"), roles);
+        String fullName = jwt.getClaimAsString("name");
+        if (fullName == null) {
+            // Compatibility with access tokens issued before the claim rename.
+            fullName = jwt.getClaimAsString("fullName");
+        }
+        return new CurrentUser(id, jwt.getClaimAsString("username"), fullName, roles);
     }
 
     public boolean isAdmin() {

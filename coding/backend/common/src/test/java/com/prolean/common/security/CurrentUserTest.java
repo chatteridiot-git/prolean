@@ -23,7 +23,7 @@ class CurrentUserTest {
                 .header("alg", "RS256")
                 .subject(id.toString())
                 .claim("username", "alice")
-                .claim("fullName", "Alice")
+                .claim("name", "Alice")
                 .claim("roles", List.of("ADMIN", "USER"))
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(300))
@@ -82,7 +82,7 @@ class CurrentUserTest {
                 .header("alg", "RS256")
                 .subject("user")
                 .issuer("prolean-auth")
-                .audience(List.of("prolean"))
+                .audience(List.of("prolean-api"))
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(300))
                 .build();

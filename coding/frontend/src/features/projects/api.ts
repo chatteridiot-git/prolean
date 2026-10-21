@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { userApi } from '@/api/client';
 import { queryKeys } from '@/lib/queryKeys';
+import { useIdempotencyKey } from '@/lib/requestId';
 import type {
   MembersAddedResponse,
   PageResponse,
@@ -56,15 +57,19 @@ export function useProject(projectId: string | undefined) {
 
 export function useCreateProject() {
   const queryClient = useQueryClient();
+  const requestId = useIdempotencyKey();
   return useMutation({
     mutationFn: async (input: ProjectInput) => {
       const { data } = await userApi.post<Project>('/api/v1/projects', {
         ...input,
-        requestId: crypto.randomUUID(),
+        requestId: requestId.get(),
       });
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projects.all }),
+    onSuccess: () => {
+      requestId.reset();
+      return queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+    },
   });
 }
 
@@ -99,7 +104,7 @@ export async function listProjectMembers(
 ): Promise<PageResponse<ProjectMember>> {
   const { data } = await userApi.get<PageResponse<ProjectMember>>(
     `/api/v1/projects/${projectId}/members`,
-    { params: { page, size, sort: 'fullName,asc' } },
+    { params: { page, size, sort: 'addedAt,asc' } },
   );
   return data;
 }

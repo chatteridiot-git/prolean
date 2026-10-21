@@ -84,6 +84,15 @@ timeline, creates/publishes a revision, and verifies an idempotent create replay
 Bootstrap admin: the configured `BOOTSTRAP_ADMIN_*` values. Change the password immediately outside
 local development.
 
+## Production hardening
+
+The checked-in Compose values are development defaults so a fresh local stack can start without
+extra setup. Before exposing the stack, provide your own `POSTGRES_PASSWORD`,
+`BOOTSTRAP_ADMIN_PASSWORD` and four `INTERNAL_KEY_*` values (at least 32 characters each), set
+`AUTH_COOKIE_SECURE=true` behind HTTPS, and keep `OPENAPI_ENABLED=false` unless the documentation
+endpoints are intentionally public. The services validate internal-key length at startup and reject
+short secrets.
+
 ## API
 
 Each service publishes OpenAPI at `/v3/api-docs` and Swagger UI at `/swagger-ui.html`.
@@ -96,8 +105,8 @@ Error responses use RFC 7807 `application/problem+json`. Lists use the standard 
 ## Database access check
 
 ```bash
-cd coding/scripts
-./db-check.sh
+cd coding
+./scripts/db-check.sh
 ```
 
-This verifies that each role can connect only to its own database.
+This verifies that each role can connect only to its own database. Start the Compose stack first.

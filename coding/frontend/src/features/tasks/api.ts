@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { taskApi } from '@/api/client';
 import { queryKeys } from '@/lib/queryKeys';
+import { useIdempotencyKey } from '@/lib/requestId';
 import type { PageResponse, Task, TaskStatus, TaskSummary } from '@/types/api';
 
 export interface TaskFilters {
@@ -47,15 +48,19 @@ export async function getTask(projectId: string, taskId: string): Promise<Task> 
 
 export function useCreateTask(projectId: string) {
   const queryClient = useQueryClient();
+  const requestId = useIdempotencyKey();
   return useMutation({
     mutationFn: async (input: TaskInput) => {
       const { data } = await taskApi.post<Task>(`/api/v1/projects/${projectId}/tasks`, {
         ...input,
-        requestId: crypto.randomUUID(),
+        requestId: requestId.get(),
       });
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tasks'] }),
+    onSuccess: () => {
+      requestId.reset();
+      return queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'tasks'] });
+    },
   });
 }
 

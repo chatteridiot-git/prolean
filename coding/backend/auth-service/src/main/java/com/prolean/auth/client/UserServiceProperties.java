@@ -9,7 +9,7 @@ public class UserServiceProperties {
 
     private String baseUrl = "http://localhost:8082";
     private String internalKeyId = "auth-service-2026-10";
-    private String internalApiKey = "dev-auth-service-key";
+    private String internalApiKey = "dev-auth-service-key-0123456789abcdef";
 
     public String getBaseUrl() {
         return baseUrl;

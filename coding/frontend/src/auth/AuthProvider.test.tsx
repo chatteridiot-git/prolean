@@ -85,14 +85,37 @@ describe('AuthProvider', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
   });
 
-  it('sets status to authenticated when session has accessToken but no user', async () => {
-    mockedRefresh.mockResolvedValue(user);
-    // Pre-set session with accessToken only, simulating the intermediate state during refresh
-    sessionStore.setAccessToken('temp-token');
+  it('derives status from token-only session updates after restore', async () => {
+    mockedRefresh.mockRejectedValue(new Error('no session'));
     render(<Probe />, { wrapper: wrapper(queryClient) });
-    // The subscription callback should set status to 'authenticated' when accessToken exists
-    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
-    expect(sessionStore.get().user).toEqual(user);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
+
+    act(() => sessionStore.setAccessToken('temp-token'));
+    expect(screen.getByTestId('status')).toHaveTextContent('authenticated');
+
+    act(() => sessionStore.clear());
+    expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+  });
+
+  it('keeps loading while session updates arrive during restore', async () => {
+    let rejectRefresh: (reason: unknown) => void = () => undefined;
+    mockedRefresh.mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectRefresh = reject;
+    }));
+    render(<Probe />, { wrapper: wrapper(queryClient) });
+    expect(screen.getByTestId('status')).toHaveTextContent('loading');
+
+    act(() => sessionStore.setAccessToken('temp-token'));
+    expect(screen.getByTestId('status')).toHaveTextContent('loading');
+
+    act(() => sessionStore.setAccessToken(null));
+    expect(screen.getByTestId('status')).toHaveTextContent('loading');
+
+    await act(async () => {
+      rejectRefresh(new Error('no session'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
   });
 
   it('logs in and stores the access token and user', async () => {

@@ -193,6 +193,32 @@ class InternalUserServiceTest {
     }
 
     @Test
+    void accessDeniesDisabledUsersEvenWhenTheyWereAdminsOrMembers() {
+        UUID projectId = UUID.randomUUID();
+        UUID disabledAdminId = UUID.randomUUID();
+        UUID disabledMemberId = UUID.randomUUID();
+        Project project = new Project();
+        project.setId(projectId);
+        project.setCode("ALPHA");
+        project.setStatus(ProjectStatus.ACTIVE);
+        when(projects.findById(projectId)).thenReturn(Optional.of(project));
+        when(users.findById(disabledAdminId))
+                .thenReturn(Optional.of(user(disabledAdminId, false, adminRole)));
+        when(users.findById(disabledMemberId))
+                .thenReturn(Optional.of(user(disabledMemberId, false, userRole)));
+
+        var adminAccess = service.access(projectId, disabledAdminId);
+        assertThat(adminAccess.allowed()).isFalse();
+        assertThat(adminAccess.admin()).isFalse();
+        assertThat(adminAccess.member()).isFalse();
+
+        var memberAccess = service.access(projectId, disabledMemberId);
+        assertThat(memberAccess.allowed()).isFalse();
+        assertThat(memberAccess.admin()).isFalse();
+        assertThat(memberAccess.member()).isFalse();
+    }
+
+    @Test
     void accessRejectsUnknownProjectOrUser() {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();

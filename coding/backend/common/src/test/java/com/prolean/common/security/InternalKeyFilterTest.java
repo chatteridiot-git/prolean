@@ -1,6 +1,7 @@
 package com.prolean.common.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prolean.common.error.ProblemDetailsFactory;
@@ -46,6 +47,19 @@ class InternalKeyFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilter(request, response, new MockFilterChain());
         return response;
+    }
+
+    @Test
+    void rejectsSecretsShorterThan256BitsAtStartup() {
+        InternalKeyProperties invalid = new InternalKeyProperties();
+        InternalKeyProperties.Caller caller = new InternalKeyProperties.Caller();
+        caller.setSecret("short");
+        caller.setScopes(List.of("GET /internal/users/*"));
+        invalid.setCallers(Map.of("user-service", caller));
+
+        assertThatThrownBy(invalid::validateSecrets)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("at least 256 bits");
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.prolean.timeline.service.HolidayService;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,11 +35,21 @@ public class HolidayController {
     }
 
     @GetMapping
-    public PageResponse<HolidayResponse> list(@RequestParam(required = false) Integer year,
+    public ResponseEntity<PageResponse<HolidayResponse>> list(
+            @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String sort) {
-        return holidayService.list(year, PageQuery.of(page, size == null ? 100 : size, sort));
+        var horizon = holidayService.horizon();
+        var list = holidayService.list(year, PageQuery.of(page, size == null ? 100 : size, sort));
+        var headers = new HttpHeaders();
+        if (horizon.startDate() != null) {
+            headers.set("X-Holiday-Coverage-Start", horizon.startDate().toString());
+        }
+        if (horizon.endDate() != null) {
+            headers.set("X-Holiday-Coverage-End", horizon.endDate().toString());
+        }
+        return ResponseEntity.ok().headers(headers).body(list);
     }
 
     @PostMapping

@@ -45,7 +45,7 @@ public class TokenService {
                 .expirationTime(Date.from(now.plusSeconds(properties.getAccessTokenTtlSeconds())))
                 .jwtID(UUID.randomUUID().toString())
                 .claim("username", username)
-                .claim("fullName", fullName)
+                .claim("name", fullName)
                 .claim("roles", roles)
                 .build();
         return keyProvider.sign(claims);

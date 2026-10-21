@@ -98,6 +98,9 @@
           <artifactId>maven-surefire-plugin</artifactId>
           <configuration>
             <trimStackTrace>false</trimStackTrace>
+            <!-- WSL file systems can make Spring/JaCoCo shutdown hooks exceed the 30s default;
+                 killing the fork mid-write corrupts jacoco.exec. -->
+            <forkedProcessExitTimeoutInSeconds>120</forkedProcessExitTimeoutInSeconds>
           </configuration>
         </plugin>
         <plugin>

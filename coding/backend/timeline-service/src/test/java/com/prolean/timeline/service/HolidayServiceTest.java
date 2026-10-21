@@ -54,10 +54,8 @@ class HolidayServiceTest {
     }
 
     @Test
-    void listsAllOrByYear() {
+    void listsByYearAndDefaultsToCurrentJakartaYear() {
         Holiday holiday = holiday(LocalDate.of(2026, 1, 1), "New Year");
-        when(repository.findAll(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(holiday)));
         when(repository.findByHolidayDateBetween(any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(holiday)));
 
@@ -65,6 +63,28 @@ class HolidayServiceTest {
         assertThat(service.list(2026, PageQuery.of(0, 20, null)).content()).hasSize(1);
         assertThat(service.list(2026, PageQuery.of(0, 20, "name,asc")).content().getFirst().name())
                 .isEqualTo("New Year");
+    }
+
+    @Test
+    void derivesHorizonFromStoredHolidayBounds() {
+        when(repository.findMinimumHolidayDate()).thenReturn(LocalDate.of(2025, 6, 17));
+        when(repository.findMaximumHolidayDate()).thenReturn(LocalDate.of(2027, 12, 26));
+
+        var horizon = service.horizon();
+
+        assertThat(horizon.startDate()).isEqualTo(LocalDate.of(2025, 1, 1));
+        assertThat(horizon.endDate()).isEqualTo(LocalDate.of(2027, 12, 31));
+    }
+
+    @Test
+    void reportsNoHorizonWhenTheHolidayTableIsEmpty() {
+        when(repository.findMinimumHolidayDate()).thenReturn(null);
+        when(repository.findMaximumHolidayDate()).thenReturn(null);
+
+        var horizon = service.horizon();
+
+        assertThat(horizon.startDate()).isNull();
+        assertThat(horizon.endDate()).isNull();
     }
 
     @Test

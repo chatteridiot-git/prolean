@@ -40,7 +40,7 @@ class JwtKeyProviderTest {
         return new JWTClaimsSet.Builder()
                 .subject("user-1")
                 .issuer("prolean-auth")
-                .audience("prolean")
+                .audience("prolean-api")
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(300)))
                 .claim("roles", List.of("USER"))

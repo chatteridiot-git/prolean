@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   App,
   Button,
@@ -22,6 +22,7 @@ import { StatusTag } from '@/components/StatusTag';
 import {
   useCreateHoliday,
   useDeleteHoliday,
+  useHolidayHorizon,
   useHolidays,
   useUpdateHoliday,
 } from '@/features/holidays/api';
@@ -29,8 +30,6 @@ import { useAuth } from '@/auth/AuthProvider';
 import { toApiDate } from '@/lib/dates';
 import { problemMessage } from '@/lib/errors';
 import type { Holiday, HolidayType } from '@/types/api';
-
-const YEARS = [2025, 2026, 2027];
 
 interface HolidayFormValues {
   date: string;
@@ -128,7 +127,20 @@ function HolidayModal({
 export function HolidaysPage() {
   const { isAdmin } = useAuth();
   const { message, modal } = App.useApp();
-  const [year, setYear] = useState<number | null>(2026);
+  const [year, setYear] = useState<number | null>(new Date().getFullYear());
+  const horizonQuery = useHolidayHorizon();
+  const years = useMemo(() => {
+    const startYear = horizonQuery.data?.startDate
+      ? Number(horizonQuery.data.startDate.slice(0, 4))
+      : new Date().getFullYear();
+    const endYear = horizonQuery.data?.endDate
+      ? Number(horizonQuery.data.endDate.slice(0, 4))
+      : startYear;
+    return Array.from({ length: Math.max(1, endYear - startYear + 1) }, (_, index) => startYear + index);
+  }, [horizonQuery.data]);
+  const horizonLabel = horizonQuery.data?.startDate && horizonQuery.data.endDate
+    ? `${horizonQuery.data.startDate} to ${horizonQuery.data.endDate}`
+    : 'loading';
   const [page, setPage] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Holiday | null>(null);
@@ -221,20 +233,17 @@ export function HolidaysPage() {
       <Card>
         <Space wrap className="filter-bar">
           <Select
-            value={year ?? 'all'}
+            value={year ?? undefined}
             onChange={(value) => {
-              setYear(value === 'all' ? null : (value as number));
+              setYear(value as number);
               setPage(0);
             }}
-            options={[
-              { value: 'all', label: 'All covered years' },
-              ...YEARS.map((value) => ({ value, label: String(value) })),
-            ]}
+            options={years.map((value) => ({ value, label: String(value) }))}
             className="filter-select"
           />
           <Tag>{holidaysQuery.data?.totalElements ?? 0} entries</Tag>
           <Typography.Text type="secondary" className="small-text">
-            Covered horizon: 2025–2027
+            Covered horizon: {horizonLabel}
           </Typography.Text>
         </Space>
         {holidaysQuery.error ? <ProblemAlert error={holidaysQuery.error} /> : null}

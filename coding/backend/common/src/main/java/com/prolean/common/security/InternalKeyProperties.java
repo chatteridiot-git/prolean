@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import jakarta.annotation.PostConstruct;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -23,6 +24,16 @@ public class InternalKeyProperties {
 
     public void setCallers(Map<String, Caller> callers) {
         this.callers = callers == null ? new LinkedHashMap<>() : callers;
+    }
+
+    @PostConstruct
+    void validateSecrets() {
+        callers.forEach((keyId, caller) -> {
+            if (caller.getSecret() == null || caller.getSecret().length() < 32) {
+                throw new IllegalStateException(
+                        "Internal API key for caller " + keyId + " must be at least 256 bits (32 characters)");
+            }
+        });
     }
 
     public static class Caller {

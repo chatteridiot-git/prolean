@@ -253,7 +253,7 @@ class AuthFlowIntegrationTest {
 
         HttpHeaders internal = jsonHeaders();
         internal.set(RequestHeaders.INTERNAL_KEY_ID, "user-service-2026-10");
-        internal.set(RequestHeaders.INTERNAL_API_KEY, "dev-user-service-key");
+        internal.set(RequestHeaders.INTERNAL_API_KEY, "dev-user-service-key-0123456789abcdef");
         ResponseEntity<String> revoke = rest.exchange(
                 "/internal/users/" + disabledId + "/revoke-tokens", HttpMethod.POST,
                 new HttpEntity<>(Map.of("reason", "DEACTIVATED"), internal), String.class);
@@ -268,6 +268,13 @@ class AuthFlowIntegrationTest {
         ResponseEntity<String> jwks = rest.getForEntity("/.well-known/jwks.json", String.class);
         assertThat(jwks.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(jwks.getBody()).contains("\"kty\":\"RSA\"").contains("\"kid\"");
+    }
+
+    @Test
+    void publishesGeneratedOpenApiDocument() {
+        ResponseEntity<String> docs = rest.getForEntity("/v3/api-docs", String.class);
+        assertThat(docs.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(docs.getBody()).contains("\"openapi\"").contains("/api/v1/auth/login");
     }
 
     @Test

@@ -201,6 +201,7 @@ class AuthServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo(ErrorCode.AUTH_REFRESH_INVALID));
         verifyNoInteractions(refreshTokens);
+        verify(cookieService).clear(response);
     }
 
     @Test
@@ -211,6 +212,7 @@ class AuthServiceTest {
         assertThatThrownBy(() -> service.refresh("raw", response))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo(ErrorCode.AUTH_REFRESH_INVALID));
+        verify(cookieService).clear(response);
     }
 
     @Test
@@ -228,6 +230,7 @@ class AuthServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo(ErrorCode.AUTH_REFRESH_REUSED));
         verify(refreshTokens).revokeFamily(eq(familyId), any(), eq("REUSE"));
+        verify(cookieService).clear(response);
     }
 
     @Test

@@ -89,9 +89,10 @@ public class InternalUserService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ApiException(ErrorCode.PROJECT_NOT_FOUND));
         AppUser user = requireUser(userId);
-        boolean admin = user.hasRole("ADMIN");
-        boolean member = memberRepository.existsMembership(projectId, userId);
-        return new AccessResponse(project.getId(), userId, admin || member, member, admin,
+        boolean active = user.isEnabled();
+        boolean admin = active && user.hasRole("ADMIN");
+        boolean member = active && memberRepository.existsMembership(projectId, userId);
+        return new AccessResponse(project.getId(), userId, active && (admin || member), member, admin,
                 project.getStatus(), project.getCode());
     }
 

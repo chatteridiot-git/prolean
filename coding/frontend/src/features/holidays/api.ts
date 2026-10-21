@@ -21,6 +21,27 @@ export function useHolidays(year: number | null, page: number, size = 20) {
   });
 }
 
+export interface HolidayHorizon {
+  startDate: string | null;
+  endDate: string | null;
+}
+
+/** Reads the first and last holiday rows so the UI reflects the database-derived horizon. */
+export function useHolidayHorizon() {
+  return useQuery({
+    queryKey: ['holidays', 'horizon'],
+    queryFn: async (): Promise<HolidayHorizon> => {
+      const response = await timelineApi.get<PageResponse<Holiday>>('/api/v1/holidays', {
+        params: { page: 0, size: 1, sort: 'date,asc' },
+      });
+      return {
+        startDate: response.headers['x-holiday-coverage-start'] ?? null,
+        endDate: response.headers['x-holiday-coverage-end'] ?? null,
+      };
+    },
+  });
+}
+
 export function useCreateHoliday() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -26,6 +26,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Transactional(readOnly = true)
@@ -112,7 +114,7 @@ public class UserService {
         user.setUpdatedBy(actor.id());
         UserResponse response = UserMapper.toResponse(userRepository.save(user));
         if (wasEnabled && !enabled) {
-            authServiceClient.revokeTokens(id, "DEACTIVATED");
+            revokeAfterCommit(id, "DEACTIVATED");
         }
         return response;
     }
@@ -136,13 +138,30 @@ public class UserService {
         user.setUpdatedBy(actor.id());
         UserResponse response = UserMapper.toResponse(userRepository.save(user));
         if (!before.equals(roleNames(resolved))) {
-            authServiceClient.revokeTokens(id, "ROLE_CHANGE");
+            revokeAfterCommit(id, "ROLE_CHANGE");
         }
         return response;
     }
 
     public UserResponse me(CurrentUser currentUser) {
         return get(currentUser.id());
+    }
+
+    /**
+     * Revocation is best-effort and must not happen if the local transaction rolls back. Registering
+     * it after commit also prevents auth-service from observing a role/status that was never stored.
+     */
+    private void revokeAfterCommit(UUID userId, String reason) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    authServiceClient.revokeTokens(userId, reason);
+                }
+            });
+        } else {
+            authServiceClient.revokeTokens(userId, reason);
+        }
     }
 
     public List<RoleResponse> listRoles() {

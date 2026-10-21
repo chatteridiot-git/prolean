@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 public interface HolidayRepository extends JpaRepository<Holiday, UUID> {
 
@@ -20,4 +21,10 @@ public interface HolidayRepository extends JpaRepository<Holiday, UUID> {
     boolean existsByHolidayDate(LocalDate holidayDate);
 
     boolean existsByHolidayDateAndIdNot(LocalDate holidayDate, UUID id);
+
+    @Query("select min(h.holidayDate) from Holiday h")
+    LocalDate findMinimumHolidayDate();
+
+    @Query("select max(h.holidayDate) from Holiday h")
+    LocalDate findMaximumHolidayDate();
 }

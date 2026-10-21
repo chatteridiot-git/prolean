@@ -46,7 +46,7 @@ class TokenServiceTest {
         assertThat(jwt.getSubject()).isEqualTo(userId.toString());
         assertThat(jwt.getClaimAsString("username")).isEqualTo("alice");
         assertThat(jwt.<Set<String>>getClaim("roles")).containsExactlyInAnyOrder("ADMIN", "USER");
-        assertThat(jwt.getAudience()).contains("prolean");
+        assertThat(jwt.getAudience()).contains("prolean-api");
         assertThat(jwt.getClaimAsString("iss")).isEqualTo("prolean-auth");
         assertThat(jwt.getExpiresAt()).isAfter(jwt.getIssuedAt());
     }

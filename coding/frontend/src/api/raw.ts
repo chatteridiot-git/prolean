@@ -1,9 +1,10 @@
 import axios from 'axios';
 import { runtimeConfig } from '@/config';
 
-const options = { withCredentials: true } as const;
+const authOptions = { withCredentials: true } as const;
+const apiOptions = { withCredentials: false } as const;
 
-export const rawAuth = axios.create({ ...options, baseURL: runtimeConfig.authApiUrl });
-export const rawUser = axios.create({ ...options, baseURL: runtimeConfig.userApiUrl });
-export const rawTask = axios.create({ ...options, baseURL: runtimeConfig.taskApiUrl });
-export const rawTimeline = axios.create({ ...options, baseURL: runtimeConfig.timelineApiUrl });
+export const rawAuth = axios.create({ ...authOptions, baseURL: runtimeConfig.authApiUrl });
+export const rawUser = axios.create({ ...apiOptions, baseURL: runtimeConfig.userApiUrl });
+export const rawTask = axios.create({ ...apiOptions, baseURL: runtimeConfig.taskApiUrl });
+export const rawTimeline = axios.create({ ...apiOptions, baseURL: runtimeConfig.timelineApiUrl });

@@ -10,6 +10,7 @@ import com.prolean.timeline.dto.HolidayDtos.HolidayRequest;
 import com.prolean.timeline.dto.HolidayDtos.HolidayResponse;
 import com.prolean.timeline.repository.HolidayRepository;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -29,6 +30,21 @@ public class HolidayService {
         this.holidayRepository = holidayRepository;
     }
 
+    public Horizon horizon() {
+        return calendarHorizon(holidayRepository.findMinimumHolidayDate(),
+                holidayRepository.findMaximumHolidayDate());
+    }
+
+    /**
+     * The supported horizon is whole calendar years, not the first/last seeded holiday date. This
+     * keeps 2025-01-01..2027-12-31 valid even though the seed's last holiday is earlier.
+     */
+    public static Horizon calendarHorizon(LocalDate minimum, LocalDate maximum) {
+        return new Horizon(
+                minimum == null ? null : minimum.withDayOfYear(1),
+                maximum == null ? null : maximum.withDayOfYear(maximum.lengthOfYear()));
+    }
+
     public PageResponse<HolidayResponse> list(Integer year, PageQuery query) {
         // The API exposes the field as "date", while the entity property is holidayDate.
         String sort = query.sort() == null
@@ -36,10 +52,11 @@ public class HolidayService {
                 : query.sort().replaceFirst("^date(?=,|$)", "holidayDate");
         Pageable pageable = new PageQuery(query.page(), query.size(), sort)
                 .toPageable(SORT_FIELDS, "holidayDate,asc");
-        Page<Holiday> page = year == null
-                ? holidayRepository.findAll(pageable)
-                : holidayRepository.findByHolidayDateBetween(
-                        LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), pageable);
+        int resolvedYear = year == null
+                ? LocalDate.now(ZoneId.of("Asia/Jakarta")).getYear()
+                : year;
+        Page<Holiday> page = holidayRepository.findByHolidayDateBetween(
+                LocalDate.of(resolvedYear, 1, 1), LocalDate.of(resolvedYear, 12, 31), pageable);
         return PageResponse.of(page.map(HolidayService::toResponse).getContent(), page);
     }
 
@@ -89,5 +106,8 @@ public class HolidayService {
                 holiday.getUpdatedBy(),
                 holiday.getCreatedAt(),
                 holiday.getUpdatedAt());
+    }
+
+    public record Horizon(LocalDate startDate, LocalDate endDate) {
     }
 }

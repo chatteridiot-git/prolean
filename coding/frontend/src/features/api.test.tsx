@@ -62,6 +62,7 @@ import {
 import {
   useCreateHoliday,
   useDeleteHoliday,
+  useHolidayHorizon,
   useHolidays,
   useUpdateHoliday,
 } from '@/features/holidays/api';
@@ -185,7 +186,7 @@ describe('project API', () => {
     mockUser.get.mockResolvedValue({ data: page([{ userId: 'u1' }]) } as never);
     await expect(listProjectMembers('p1')).resolves.toEqual(page([{ userId: 'u1' }]));
     expect(mockUser.get).toHaveBeenCalledWith('/api/v1/projects/p1/members', {
-      params: { page: 0, size: 100, sort: 'fullName,asc' },
+      params: { page: 0, size: 100, sort: 'addedAt,asc' },
     });
 
     const { wrapper } = setup();
@@ -256,6 +257,34 @@ describe('project API', () => {
       await remove.result.current.mutateAsync('u2');
     });
     expect(mockUser.delete).toHaveBeenCalledWith('/api/v1/projects/p1/members/u2');
+  });
+});
+
+describe('idempotency', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('reuses the requestId when a failed create is retried manually', async () => {
+    const { wrapper } = setup();
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce('11111111-1111-4111-8111-111111111111');
+    mockUser.post
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ data: project } as never);
+    const create = renderHook(() => useCreateProject(), { wrapper });
+    const input = {
+      code: 'P1',
+      name: 'Project',
+      startDate: '2026-01-01',
+      endDate: '2026-02-01',
+    };
+    await act(async () => {
+      await expect(create.result.current.mutateAsync(input)).rejects.toThrow('network');
+    });
+    await act(async () => {
+      await create.result.current.mutateAsync(input);
+    });
+    const first = mockUser.post.mock.calls[0][1] as { requestId: string };
+    const second = mockUser.post.mock.calls[1][1] as { requestId: string };
+    expect(first.requestId).toBe(second.requestId);
   });
 });
 
@@ -347,7 +376,7 @@ describe('timeline API', () => {
     const versions = renderHook(() => useTimelineVersions('p1', 0), { wrapper });
     await waitFor(() => expect(versions.result.current.isSuccess).toBe(true));
     expect(mockTimeline.get).toHaveBeenCalledWith('/api/v1/projects/p1/timeline/versions', {
-      params: { page: 0, size: 10, sort: 'versionNumber,desc' },
+      params: { page: 0, size: 50, sort: 'versionNumber,desc' },
     });
   });
 
@@ -515,6 +544,27 @@ describe('user API', () => {
 
 describe('holiday API', () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it('reads the database-derived coverage horizon from response headers', async () => {
+    const { wrapper } = setup();
+    mockTimeline.get.mockResolvedValue({
+      data: page([holiday]),
+      headers: {
+        'x-holiday-coverage-start': '2025-01-01',
+        'x-holiday-coverage-end': '2027-12-31',
+      },
+    } as never);
+    const horizon = renderHook(() => useHolidayHorizon(), { wrapper });
+    await waitFor(() =>
+      expect(horizon.result.current.data).toEqual({
+        startDate: '2025-01-01',
+        endDate: '2027-12-31',
+      }),
+    );
+    expect(mockTimeline.get).toHaveBeenCalledWith('/api/v1/holidays', {
+      params: { page: 0, size: 1, sort: 'date,asc' },
+    });
+  });
 
   it('lists holidays with and without a year and mutates them', async () => {
     mockTimeline.get.mockResolvedValue({ data: page([holiday]) } as never);

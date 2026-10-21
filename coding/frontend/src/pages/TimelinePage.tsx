@@ -45,7 +45,7 @@ import type { TimelineFormMode } from '@/features/timeline/TimelineFormDrawer';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import { problemCode, problemMessage } from '@/lib/errors';
 import { formatPercent, gapLabel } from '@/lib/progress';
-import type { OperationalStatus, TimelineVersion } from '@/types/api';
+import type { OperationalStatus, TimelineAggregate, TimelineVersion } from '@/types/api';
 import type { TimelineValues } from '@/lib/validation';
 
 export function TimelinePage() {
@@ -53,7 +53,8 @@ export function TimelinePage() {
   const { message, modal } = App.useApp();
   const archived = project.status === 'ARCHIVED';
   const timelineQuery = useTimeline(project.id);
-  const versionsQuery = useTimelineVersions(project.id, 0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const versionsQuery = useTimelineVersions(project.id, historyPage);
   const createTimeline = useCreateTimeline(project.id);
   const editDraft = useEditTimelineDraft(project.id);
   const cancelDraft = useCancelTimelineDraft(project.id);
@@ -66,19 +67,76 @@ export function TimelinePage() {
   const [drawerMode, setDrawerMode] = useState<TimelineFormMode>('create');
   const [progressOpen, setProgressOpen] = useState(false);
   const [progressValue, setProgressValue] = useState(0);
+  const [conflict, setConflict] = useState<{
+    title: string;
+    expected: string;
+    actual: string;
+    reapply: () => Promise<void>;
+  } | null>(null);
+  const [conflictPending, setConflictPending] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const timeline = timelineQuery.data;
   const current = timeline?.current ?? null;
   const draft = timeline?.draft ?? null;
 
   const handleError = (error: unknown, fallback: string) => {
-    const code = problemCode(error);
-    if (code === 'DRAFT_MODIFIED' || code === 'CURRENT_VERSION_CHANGED') {
-      message.warning('Someone changed the timeline while you were working. The latest data is reloaded.');
-      void timelineQuery.refetch();
-      return;
-    }
     message.error(problemMessage(error) || fallback);
+  };
+
+  /**
+   * Turns a stale-timestamp conflict into an explicit review-and-reapply step. The stale values
+   * are never silently overwritten: the user sees both timestamps and chooses to reload.
+   */
+  const offerConflictRecovery = async (
+    error: unknown,
+    title: string,
+    expected: string | undefined,
+    reapply: (fresh: TimelineAggregate) => Promise<void>,
+  ): Promise<boolean> => {
+    const code = problemCode(error);
+    if (code !== 'DRAFT_MODIFIED' && code !== 'CURRENT_VERSION_CHANGED') return false;
+    const refreshed = await timelineQuery.refetch();
+    const fresh = refreshed.data;
+    if (!fresh) {
+      message.error('The timeline changed, but the latest values could not be loaded. Retry in a moment.');
+      return true;
+    }
+    const actual = code === 'DRAFT_MODIFIED'
+      ? fresh.draft?.updatedAt
+      : fresh.current?.updatedAt;
+    setConflictError(null);
+    setConflictPending(false);
+    setConflict({
+      title,
+      expected: expected ?? 'unknown',
+      actual: actual ?? 'unknown',
+      reapply: () => reapply(fresh),
+    });
+    return true;
+  };
+
+  const applyConflictResolution = async () => {
+    if (!conflict || conflictPending) return;
+    setConflictPending(true);
+    setConflictError(null);
+    try {
+      await conflict.reapply();
+      message.success('Latest timeline reloaded and your changes reapplied');
+      setConflict(null);
+      setDrawerOpen(false);
+    } catch (error) {
+      setConflictError(problemMessage(error) || 'Could not reapply the timeline changes.');
+    } finally {
+      setConflictPending(false);
+    }
+  };
+
+  const discardConflictChanges = () => {
+    setConflict(null);
+    setConflictError(null);
+    setDrawerOpen(false);
+    message.info('Kept the latest timeline and discarded your unsaved changes.');
   };
 
   const submitForm = async (values: TimelineValues) => {
@@ -87,11 +145,28 @@ export function TimelinePage() {
         await createTimeline.mutateAsync(values);
         message.success('Timeline draft created');
       } else if (drawerMode === 'edit' && draft) {
-        await editDraft.mutateAsync({
-          ...values,
-          expectedDraftUpdatedAt: draft.updatedAt,
-        });
-        message.success('Draft updated');
+        try {
+          await editDraft.mutateAsync({
+            ...values,
+            expectedDraftUpdatedAt: draft.updatedAt,
+          });
+          message.success('Draft updated');
+        } catch (error) {
+          const recovering = await offerConflictRecovery(
+            error,
+            'Draft changed while you were editing',
+            draft.updatedAt,
+            async (fresh) => {
+              if (!fresh.draft) throw error;
+              await editDraft.mutateAsync({
+                ...values,
+                expectedDraftUpdatedAt: fresh.draft.updatedAt,
+              });
+            },
+          );
+          if (!recovering) throw error;
+          return;
+        }
       } else if (drawerMode === 'revise') {
         await createRevision.mutateAsync(values);
         message.success('Draft revision created');
@@ -127,8 +202,22 @@ export function TimelinePage() {
           });
           message.success('Timeline published');
         } catch (error) {
-          handleError(error, 'Could not publish the timeline.');
-          throw error;
+          const recovering = await offerConflictRecovery(
+            error,
+            'Timeline changed before publishing',
+            draft.updatedAt,
+            async (fresh) => {
+              if (!fresh.draft) throw error;
+              await publishTimeline.mutateAsync({
+                expectedDraftUpdatedAt: fresh.draft.updatedAt,
+                expectedCurrentUpdatedAt: fresh.current?.updatedAt,
+              });
+            },
+          );
+          if (!recovering) {
+            handleError(error, 'Could not publish the timeline.');
+            throw error;
+          }
         }
       },
     });
@@ -455,7 +544,14 @@ export function TimelinePage() {
                 loading={versionsQuery.isLoading}
                 scroll={{ x: 860 }}
                 locale={{ emptyText: 'No versions yet.' }}
-                pagination={false}
+                pagination={{
+                  current: historyPage + 1,
+                  pageSize: 50,
+                  total: versionsQuery.data?.totalElements ?? 0,
+                  showSizeChanger: false,
+                  showTotal: (total) => `${total} versions`,
+                  onChange: (nextPage) => setHistoryPage(nextPage - 1),
+                }}
               />
             </Card>
           </>
@@ -491,6 +587,35 @@ export function TimelinePage() {
           value={progressValue}
           onChange={(value) => setProgressValue(Number(value ?? 0))}
           className="full-width"
+        />
+      </Modal>
+      <Modal
+        open={Boolean(conflict)}
+        title={conflict?.title}
+        okText="Reload and reapply"
+        cancelText="Keep latest, discard my changes"
+        confirmLoading={conflictPending}
+        okButtonProps={{ disabled: conflictPending }}
+        onOk={() => void applyConflictResolution()}
+        onCancel={discardConflictChanges}
+      >
+        {conflictError ? (
+          <Alert type="error" showIcon message={conflictError} className="conflict-error" />
+        ) : null}
+        <Alert
+          type="warning"
+          showIcon
+          message="Your copy is based on an older version. Nothing was overwritten."
+          description={
+            <div>
+              <div>Your expected timestamp: <code>{conflict?.expected}</code></div>
+              <div>Current timestamp: <code>{conflict?.actual}</code></div>
+              <p>
+                Reload applies your entered values on top of the latest timeline. Review the
+                current values first if another person may have changed the dates or notes.
+              </p>
+            </div>
+          }
         />
       </Modal>
     </div>

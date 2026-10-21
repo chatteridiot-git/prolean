@@ -19,7 +19,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 public final class JwtSupport {
 
     public static final String ISSUER = "prolean-auth";
-    public static final String AUDIENCE = "prolean";
+    public static final String AUDIENCE = "prolean-api";
     public static final String ROLES_CLAIM = "roles";
 
     private JwtSupport() {

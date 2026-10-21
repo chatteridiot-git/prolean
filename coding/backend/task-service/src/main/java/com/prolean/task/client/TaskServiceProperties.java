@@ -9,7 +9,7 @@ public class TaskServiceProperties {
 
     private String baseUrl = "http://localhost:8082";
     private String internalKeyId = "task-service-2026-10";
-    private String internalApiKey = "dev-task-service-key";
+    private String internalApiKey = "dev-task-service-key-0123456789abcdef";
 
     public String getBaseUrl() {
         return baseUrl;

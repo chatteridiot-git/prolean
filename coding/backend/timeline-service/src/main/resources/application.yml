@@ -42,8 +42,10 @@ management:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: ${OPENAPI_ENABLED:true}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${OPENAPI_ENABLED:true}
 
 prolean:
   auth:
@@ -52,10 +54,8 @@ prolean:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
   timeline:
     zone: ${TIMELINE_ZONE:Asia/Jakarta}
-    coverage-start: ${HOLIDAY_COVERAGE_START:2025-01-01}
-    coverage-end: ${HOLIDAY_COVERAGE_END:2027-12-31}
   services:
     user:
       base-url: ${USER_SERVICE_URL:http://localhost:8082}
       internal-key-id: timeline-service-2026-10
-      internal-api-key: ${INTERNAL_KEY_TIMELINE_SERVICE:dev-timeline-service-key}
+      internal-api-key: ${INTERNAL_KEY_TIMELINE_SERVICE:dev-timeline-service-key-0123456789abcdef}

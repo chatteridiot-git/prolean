@@ -42,8 +42,10 @@ management:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: ${OPENAPI_ENABLED:true}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${OPENAPI_ENABLED:true}
 
 prolean:
   auth:
@@ -53,22 +55,22 @@ prolean:
   internal:
     callers:
       auth-service-2026-10:
-        secret: ${INTERNAL_KEY_AUTH_SERVICE:dev-auth-service-key}
+        secret: ${INTERNAL_KEY_AUTH_SERVICE:dev-auth-service-key-0123456789abcdef}
         scopes:
           - "GET /internal/users/*"
           - "GET /internal/users/*/auth-context"
           - "POST /internal/users/bootstrap"
       task-service-2026-10:
-        secret: ${INTERNAL_KEY_TASK_SERVICE:dev-task-service-key}
+        secret: ${INTERNAL_KEY_TASK_SERVICE:dev-task-service-key-0123456789abcdef}
         scopes:
           - "GET /internal/users/*"
           - "GET /internal/projects/*/access"
       timeline-service-2026-10:
-        secret: ${INTERNAL_KEY_TIMELINE_SERVICE:dev-timeline-service-key}
+        secret: ${INTERNAL_KEY_TIMELINE_SERVICE:dev-timeline-service-key-0123456789abcdef}
         scopes:
           - "GET /internal/projects/*/access"
   services:
     auth:
       base-url: ${AUTH_SERVICE_URL:http://localhost:8081}
       internal-key-id: user-service-2026-10
-      internal-api-key: ${INTERNAL_KEY_USER_SERVICE:dev-user-service-key}
+      internal-api-key: ${INTERNAL_KEY_USER_SERVICE:dev-user-service-key-0123456789abcdef}

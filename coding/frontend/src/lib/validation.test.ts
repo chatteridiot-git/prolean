@@ -123,7 +123,7 @@ describe('validation schemas', () => {
     expect(taskSchema.safeParse({ ...valid, status: 'CLOSED', percentComplete: 99 }).success).toBe(false);
   });
 
-  it('validates timeline forms and coverage horizon', () => {
+  it('validates timeline forms; horizon is enforced by the backend', () => {
     expect(
       timelineSchema.safeParse({
         startDate: '2026-01-01',
@@ -141,10 +141,10 @@ describe('validation schemas', () => {
     ).toBe(false);
     expect(
       timelineSchema.safeParse({ startDate: '2024-12-31', endDate: '2025-01-02' }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       timelineSchema.safeParse({ startDate: '2027-12-30', endDate: '2028-01-02' }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       timelineSchema.safeParse({
         startDate: '2026-01-01',

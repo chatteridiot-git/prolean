@@ -15,6 +15,7 @@ import com.prolean.auth.repository.RefreshTokenRepository;
 import com.prolean.common.error.ApiException;
 import com.prolean.common.error.ErrorCode;
 import com.prolean.common.security.CurrentUser;
+import io.micrometer.core.instrument.Metrics;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
 import java.time.Instant;
@@ -108,6 +109,16 @@ public class AuthService {
 
     @Transactional(noRollbackFor = ApiException.class)
     public RefreshResponse refresh(String rawRefreshToken, HttpServletResponse response) {
+        try {
+            return refreshInternal(rawRefreshToken, response);
+        } catch (RuntimeException exception) {
+            // Never leave a token the server has rejected in the browser cookie jar.
+            cookieService.clear(response);
+            throw exception;
+        }
+    }
+
+    private RefreshResponse refreshInternal(String rawRefreshToken, HttpServletResponse response) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             throw new ApiException(ErrorCode.AUTH_REFRESH_INVALID);
         }
@@ -115,6 +126,7 @@ public class AuthService {
         RefreshToken token = refreshTokenRepository.findByTokenHash(tokenService.hash(rawRefreshToken))
                 .orElseThrow(() -> new ApiException(ErrorCode.AUTH_REFRESH_INVALID));
         if (token.getRevokedAt() != null) {
+            Metrics.counter("prolean.auth.refresh.reuse", "service", "auth-service").increment();
             refreshTokenRepository.revokeFamily(token.getFamilyId(), now, "REUSE");
             throw new ApiException(ErrorCode.AUTH_REFRESH_REUSED);
         }
@@ -140,6 +152,7 @@ public class AuthService {
         UUID replacementId = UUID.randomUUID();
         int rotated = refreshTokenRepository.markRotated(token.getId(), now, replacementId);
         if (rotated == 0) {
+            Metrics.counter("prolean.auth.refresh.reuse", "service", "auth-service").increment();
             refreshTokenRepository.revokeFamily(token.getFamilyId(), now, "REUSE");
             throw new ApiException(ErrorCode.AUTH_REFRESH_REUSED);
         }

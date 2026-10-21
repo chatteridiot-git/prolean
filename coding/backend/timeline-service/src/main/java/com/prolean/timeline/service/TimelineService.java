@@ -22,6 +22,7 @@ import com.prolean.timeline.dto.TimelineDtos.TimelineAggregateResponse;
 import com.prolean.timeline.dto.TimelineDtos.TimelineVersionResponse;
 import com.prolean.timeline.dto.TimelineDtos.VersionResult;
 import com.prolean.timeline.mapper.TimelineMapper;
+import io.micrometer.core.instrument.Metrics;
 import com.prolean.timeline.repository.HolidayRepository;
 import com.prolean.timeline.repository.TimelineRepository;
 import com.prolean.timeline.repository.TimelineVersionEventRepository;
@@ -150,7 +151,7 @@ public class TimelineService {
         version.setRequestId(request.requestId());
         version.setCreatedBy(actor.id());
         version.setUpdatedBy(actor.id());
-        version = versionRepository.saveAndFlush(version);
+        version = persist(version);
         record(version, TimelineEventType.CREATED, actor, Map.of("versionNumber", 1));
         requireAccess(projectId, actor, true);
         return new VersionResult(toResponse(timeline, version, properties.today()), false);
@@ -168,7 +169,7 @@ public class TimelineService {
         draft.setEndDate(request.endDate());
         draft.setRevisionNotes(request.revisionNotes());
         draft.setUpdatedBy(actor.id());
-        draft = versionRepository.saveAndFlush(draft);
+        draft = persist(draft);
         record(draft, TimelineEventType.UPDATED, actor,
                 Map.of("startDate", request.startDate().toString(),
                         "endDate", request.endDate().toString()));
@@ -187,6 +188,7 @@ public class TimelineService {
                 timeline.getId(), List.of(LifecycleStatus.PUBLISHED, LifecycleStatus.SUPERSEDED));
         long versionCount = versionRepository.countByTimelineId(timeline.getId());
         if (!everPublished && versionCount == 1) {
+            requireAccess(projectId, actor, true);
             timelineRepository.delete(timeline);
             return;
         }
@@ -201,7 +203,8 @@ public class TimelineService {
         draft.setSnapshotPercentPlan(plan.percentPlan());
         draft.setSnapshotPercentActual(0);
         draft.setSnapshotAsOfDate(today);
-        versionRepository.save(draft);
+        requireAccess(projectId, actor, true);
+        persist(draft);
         record(draft, TimelineEventType.CANCELLED, actor, Map.of("versionNumber", draft.getVersionNumber()));
         requireAccess(projectId, actor, true);
     }
@@ -246,7 +249,7 @@ public class TimelineService {
             current.setSnapshotPercentPlan(snapshot.percentPlan());
             current.setSnapshotPercentActual(current.getPercentActual());
             current.setSnapshotAsOfDate(snapshot.asOfDate());
-            versionRepository.saveAndFlush(current);
+            persist(current);
             record(current, TimelineEventType.SUPERSEDED, actor,
                     Map.of("supersededByVersion", draft.getVersionNumber()));
         }
@@ -258,7 +261,7 @@ public class TimelineService {
         draft.setPublishedAt(now);
         draft.setUpdatedBy(actor.id());
         draft.setPublishRequestId(request.requestId());
-        draft = versionRepository.saveAndFlush(draft);
+        draft = persist(draft);
         record(draft, TimelineEventType.PUBLISHED, actor,
                 Map.of("versionNumber", draft.getVersionNumber()));
         requireAccess(projectId, actor, true);
@@ -308,7 +311,7 @@ public class TimelineService {
         draft.setRequestId(request.requestId());
         draft.setCreatedBy(actor.id());
         draft.setUpdatedBy(actor.id());
-        draft = versionRepository.saveAndFlush(draft);
+        draft = persist(draft);
         record(draft, TimelineEventType.CREATED, actor,
                 Map.of("versionNumber", draft.getVersionNumber()));
         requireAccess(projectId, actor, true);
@@ -328,7 +331,8 @@ public class TimelineService {
             current.setPercentActual(100);
         }
         current.setUpdatedBy(actor.id());
-        current = versionRepository.saveAndFlush(current);
+        requireAccess(projectId, actor, true);
+        current = persist(current);
         record(current, TimelineEventType.STATUS_CHANGED, actor,
                 Map.of("previous", previous.name(), "current", target.name()));
         return toResponse(timeline, current, properties.today());
@@ -346,10 +350,21 @@ public class TimelineService {
         int previous = current.getPercentActual();
         current.setPercentActual(percentActual);
         current.setUpdatedBy(actor.id());
-        current = versionRepository.saveAndFlush(current);
+        requireAccess(projectId, actor, true);
+        current = persist(current);
         record(current, TimelineEventType.PROGRESS_CHANGED, actor,
                 Map.of("previous", previous, "current", percentActual));
         return toResponse(timeline, current, properties.today());
+    }
+
+    /**
+     * Saves a version and flushes immediately so entity callbacks (and therefore the
+     * updated_at value returned to clients) match the row already stored in PostgreSQL.
+     */
+    private TimelineVersion persist(TimelineVersion version) {
+        TimelineVersion saved = versionRepository.save(version);
+        versionRepository.flush();
+        return saved;
     }
 
     private Timeline lockTimeline(UUID projectId) {
@@ -386,6 +401,8 @@ public class TimelineService {
 
     private void checkDraftTimestamp(TimelineVersion draft, Instant expected) {
         if (expected != null && !sameInstant(expected, draft.getUpdatedAt())) {
+            Metrics.counter("prolean.timeline.version.conflict", "code",
+                    ErrorCode.DRAFT_MODIFIED.name()).increment();
             throw new ApiException(ErrorCode.DRAFT_MODIFIED);
         }
     }
@@ -398,6 +415,8 @@ public class TimelineService {
             return;
         }
         if (expected == null || !sameInstant(expected, current.getUpdatedAt())) {
+            Metrics.counter("prolean.timeline.version.conflict", "code",
+                    ErrorCode.CURRENT_VERSION_CHANGED.name()).increment();
             throw new ApiException(ErrorCode.CURRENT_VERSION_CHANGED);
         }
     }
@@ -412,8 +431,11 @@ public class TimelineService {
         if (endDate.isBefore(startDate)) {
             throw new ApiException(ErrorCode.INVALID_DATE_RANGE);
         }
-        if (startDate.isBefore(properties.getCoverageStart())
-                || endDate.isAfter(properties.getCoverageEnd())) {
+        HolidayService.Horizon horizon = HolidayService.calendarHorizon(
+                holidayRepository.findMinimumHolidayDate(),
+                holidayRepository.findMaximumHolidayDate());
+        if (horizon.startDate() == null || horizon.endDate() == null
+                || startDate.isBefore(horizon.startDate()) || endDate.isAfter(horizon.endDate())) {
             throw new ApiException(ErrorCode.HOLIDAY_COVERAGE_REQUIRED);
         }
         if (requireWorkingDays) {

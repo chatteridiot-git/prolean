@@ -71,7 +71,7 @@ DRAFT="$(request POST "/api/v1/projects/$PROJECT_ID/timeline" 201 "$(jq -nc \
   --arg requestId "$TIMELINE_REQUEST_ID" \
   '{startDate:"2026-11-02",endDate:"2026-11-20",requestId:$requestId,revisionNotes:"Smoke baseline"}')")"
 DRAFT_UPDATED_AT="$(jq -r '.updatedAt' <<<"$DRAFT")"
-PUBLISHED="$(request POST "/api/v1/projects/$PROJECT_ID/timeline/draft/publish" 201 "$(jq -nc \
+PUBLISHED="$(request POST "/api/v1/projects/$PROJECT_ID/timeline/draft/publish" 200 "$(jq -nc \
   --arg draft "$DRAFT_UPDATED_AT" --arg requestId "$(cat /proc/sys/kernel/random/uuid)" \
   '{requestId:$requestId,expectedDraftUpdatedAt:$draft}')")"
 [[ "$(jq -r '.lifecycleStatus' <<<"$PUBLISHED")" == "PUBLISHED" ]] || { echo "Timeline not published" >&2; exit 1; }
@@ -82,7 +82,7 @@ REVISION="$(request POST "/api/v1/projects/$PROJECT_ID/timeline/revisions" 201 "
   --arg requestId "$(cat /proc/sys/kernel/random/uuid)" \
   '{startDate:"2026-11-09",endDate:"2026-11-27",requestId:$requestId,revisionNotes:"Smoke revision"}')")"
 REVISION_UPDATED_AT="$(jq -r '.updatedAt' <<<"$REVISION")"
-REVISED="$(request POST "/api/v1/projects/$PROJECT_ID/timeline/draft/publish" 201 "$(jq -nc \
+REVISED="$(request POST "/api/v1/projects/$PROJECT_ID/timeline/draft/publish" 200 "$(jq -nc \
   --arg draft "$REVISION_UPDATED_AT" --arg current "$CURRENT_UPDATED_AT" --arg requestId "$(cat /proc/sys/kernel/random/uuid)" \
   '{requestId:$requestId,expectedDraftUpdatedAt:$draft,expectedCurrentUpdatedAt:$current}')")"
 [[ "$(jq -r '.versionNumber' <<<"$REVISED")" == "2" ]] || { echo "Revision not published" >&2; exit 1; }

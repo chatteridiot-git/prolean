@@ -81,13 +81,13 @@ class TimelineServiceTest {
     @BeforeEach
     void setUp() {
         properties = new TimelineProperties();
-        properties.setCoverageStart(LocalDate.of(2020, 1, 1));
-        properties.setCoverageEnd(LocalDate.of(2030, 12, 31));
         service = new TimelineService(timelines, versions, events, holidays, accessClient, properties);
 
         lenient().when(accessClient.access(any(), any())).thenReturn(activeAccess);
         lenient().when(holidays.findByHolidayDateBetweenOrderByHolidayDateAsc(any(), any()))
                 .thenReturn(List.of());
+        lenient().when(holidays.findMinimumHolidayDate()).thenReturn(LocalDate.of(2020, 1, 1));
+        lenient().when(holidays.findMaximumHolidayDate()).thenReturn(LocalDate.of(2030, 12, 31));
         lenient().when(versions.save(any())).thenAnswer(invocation -> {
             TimelineVersion version = invocation.getArgument(0);
             if (version.getId() == null) {
@@ -244,6 +244,28 @@ class TimelineServiceTest {
                 ArgumentCaptor.forClass(TimelineVersionEvent.class);
         verify(events).save(eventCaptor.capture());
         assertThat(eventCaptor.getValue().getEventType()).isEqualTo(TimelineEventType.CREATED);
+    }
+
+    @Test
+    void createUsesWholeCalendarYearsForHolidayCoverage() {
+        when(versions.findByRequestId(any())).thenReturn(Optional.empty());
+        when(timelines.findByProjectId(projectId)).thenReturn(Optional.empty());
+        when(holidays.findMinimumHolidayDate()).thenReturn(LocalDate.of(2025, 6, 17));
+        when(holidays.findMaximumHolidayDate()).thenReturn(LocalDate.of(2027, 12, 26));
+
+        VersionResult result = service.create(projectId,
+                new CreateTimelineRequest(LocalDate.of(2027, 12, 31), LocalDate.of(2027, 12, 31),
+                        UUID.randomUUID(), null),
+                actor);
+
+        assertThat(result.version().durationWorkdays()).isEqualTo(1);
+
+        assertThatThrownBy(() -> service.create(projectId,
+                new CreateTimelineRequest(LocalDate.of(2028, 1, 1), LocalDate.of(2028, 1, 1),
+                        UUID.randomUUID(), null),
+                actor))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo(ErrorCode.HOLIDAY_COVERAGE_REQUIRED));
     }
 
     @Test
@@ -646,6 +668,42 @@ class TimelineServiceTest {
 
         assertThat(service.changeStatus(projectId, OperationalStatus.IN_PROGRESS, actor)
                 .operationalStatus()).isEqualTo(OperationalStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void mutationPathsRecheckAccessBeforeCommit() {
+        Timeline timeline = timeline();
+        TimelineVersion current = version(timeline, 1, LifecycleStatus.PUBLISHED);
+        stubTimeline(timeline);
+        stubVersion(timeline, LifecycleStatus.PUBLISHED, current);
+        TimelineAccessClient.Access denied =
+                new TimelineAccessClient.Access(projectId, actorId, false, false, false, "ACTIVE", "ALPHA");
+        when(accessClient.access(any(), any())).thenReturn(activeAccess, denied);
+
+        assertThatThrownBy(() -> service.changeStatus(projectId, OperationalStatus.IN_PROGRESS, actor))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN));
+
+        when(accessClient.access(any(), any())).thenReturn(activeAccess, denied);
+        assertThatThrownBy(() -> service.changeProgress(projectId, 10, actor))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN));
+    }
+
+    @Test
+    void cancelRechecksAccessBeforeDeletingInitialDraft() {
+        Timeline timeline = timeline();
+        TimelineVersion draft = version(timeline, 1, LifecycleStatus.DRAFT);
+        stubTimeline(timeline);
+        stubVersion(timeline, LifecycleStatus.DRAFT, draft);
+        TimelineAccessClient.Access denied =
+                new TimelineAccessClient.Access(projectId, actorId, false, false, false, "ACTIVE", "ALPHA");
+        when(accessClient.access(any(), any())).thenReturn(activeAccess, denied);
+
+        assertThatThrownBy(() -> service.cancelDraft(projectId, null, actor))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo(ErrorCode.FORBIDDEN));
+        verify(timelines, never()).delete(any());
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.prolean.task.client;
 
 import com.prolean.common.error.ApiException;
 import com.prolean.common.error.ErrorCode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prolean.common.web.RequestHeaders;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -12,6 +14,8 @@ import org.springframework.web.client.RestClientResponseException;
 /** Client for the user-service access and profile internal contracts (I1, I4). */
 @Component
 public class ProjectAccessClient {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final RestClient restClient;
     private final TaskServiceProperties properties;
@@ -30,7 +34,7 @@ public class ProjectAccessClient {
                     .body(Access.class);
         } catch (RestClientResponseException exception) {
             if (exception.getStatusCode().value() == 404) {
-                throw new ApiException(ErrorCode.PROJECT_NOT_FOUND);
+                throw new ApiException(notFoundCode(exception));
             }
             throw new ApiException(ErrorCode.INTERNAL_DEPENDENCY_UNAVAILABLE);
         } catch (RestClientException exception) {
@@ -58,6 +62,18 @@ public class ProjectAccessClient {
     private void internalHeaders(org.springframework.http.HttpHeaders headers) {
         headers.set(RequestHeaders.INTERNAL_KEY_ID, properties.getInternalKeyId());
         headers.set(RequestHeaders.INTERNAL_API_KEY, properties.getInternalApiKey());
+    }
+
+    private ErrorCode notFoundCode(RestClientResponseException exception) {
+        try {
+            JsonNode code = MAPPER.readTree(exception.getResponseBodyAsString()).path("code");
+            if ("USER_NOT_FOUND".equals(code.asText())) {
+                return ErrorCode.USER_NOT_FOUND;
+            }
+        } catch (Exception ignored) {
+            // Fall through to the project error when the downstream body is not Problem Details.
+        }
+        return ErrorCode.PROJECT_NOT_FOUND;
     }
 
     public record Access(UUID projectId, UUID userId, boolean allowed, boolean member, boolean admin,

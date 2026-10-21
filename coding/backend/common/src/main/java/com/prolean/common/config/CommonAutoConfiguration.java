@@ -8,7 +8,6 @@ import com.prolean.common.security.InternalKeyFilter;
 import com.prolean.common.security.InternalKeyProperties;
 import com.prolean.common.security.SecurityProblemSupport;
 import com.prolean.common.web.RequestIdFilter;
-import java.net.http.HttpClient;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,7 +21,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -83,13 +82,14 @@ public class CommonAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public RestClientCustomizer http1RestClientCustomizer() {
-        // Internal service-to-service calls use plain HTTP. Forcing HTTP/1.1 avoids h2c upgrade
-        // attempts that Jetty/Testcontainers peers answer with RST_STREAM.
-        return builder -> builder.requestFactory(
-                new JdkClientHttpRequestFactory(HttpClient.newBuilder()
-                        .version(HttpClient.Version.HTTP_1_1)
-                        .build()));
+    public RestClientCustomizer internalRestClientCustomizer() {
+        // Internal service-to-service calls use plain HTTP. A simple HTTP/1.1 request factory
+        // avoids h2c upgrade attempts (RST_STREAM with Jetty/WireMock) and the non-daemon
+        // selector threads that keep test JVMs alive after the suite has finished.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2_000);
+        factory.setReadTimeout(3_000);
+        return builder -> builder.requestFactory(factory);
     }
 
     @Bean
@@ -111,7 +111,8 @@ public class CommonAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(CorsConfigurationSource.class)
     public CorsConfigurationSource corsConfigurationSource(
-            @Value("${prolean.cors.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+            @Value("${prolean.cors.allowed-origins:http://localhost:5173}") String allowedOrigins,
+            @Value("${prolean.cors.allow-credentials:false}") boolean allowCredentials) {
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
@@ -123,8 +124,9 @@ public class CommonAutoConfiguration {
                 HttpMethod.PATCH.name(), HttpMethod.DELETE.name(), HttpMethod.OPTIONS.name()));
         configuration.setAllowedHeaders(List.of(
                 "Authorization", "Content-Type", "X-Request-Id", "X-Internal-Key-Id", "X-Internal-Api-Key"));
-        configuration.setExposedHeaders(List.of("X-Request-Id", "Idempotent-Replay"));
-        configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(List.of("X-Request-Id", "Idempotent-Replay",
+                "X-Holiday-Coverage-Start", "X-Holiday-Coverage-End"));
+        configuration.setAllowCredentials(allowCredentials);
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

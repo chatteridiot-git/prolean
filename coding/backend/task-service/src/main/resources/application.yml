@@ -42,8 +42,10 @@ management:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: ${OPENAPI_ENABLED:true}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${OPENAPI_ENABLED:true}
 
 prolean:
   auth:
@@ -54,4 +56,4 @@ prolean:
     user:
       base-url: ${USER_SERVICE_URL:http://localhost:8082}
       internal-key-id: task-service-2026-10
-      internal-api-key: ${INTERNAL_KEY_TASK_SERVICE:dev-task-service-key}
+      internal-api-key: ${INTERNAL_KEY_TASK_SERVICE:dev-task-service-key-0123456789abcdef}

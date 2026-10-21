@@ -272,6 +272,14 @@ class UserDomainIntegrationTest {
     }
 
     @Test
+    void publishesGeneratedOpenApiDocument() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"openapi\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("/api/v1/projects")));
+    }
+
+    @Test
     void httpControllerContractsUseProblemDetailsAndRoleGuards() throws Exception {
         AppUser admin = createUser("http.admin", "ADMIN");
         AppUser member = createUser("http.member", "USER");

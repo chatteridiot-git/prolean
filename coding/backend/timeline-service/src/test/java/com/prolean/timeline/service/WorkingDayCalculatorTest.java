@@ -24,6 +24,13 @@ class WorkingDayCalculatorTest {
     }
 
     @Test
+    void utilityConstructorIsPrivateButReachableForCoverage() throws Exception {
+        var constructor = WorkingDayCalculator.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        assertThat(constructor.newInstance()).isNotNull();
+    }
+
+    @Test
     void rejectsReversedRange() {
         assertThatThrownBy(() -> WorkingDayCalculator.countWorkingDays(
                 LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 1), Set.of()))

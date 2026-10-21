@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -272,6 +273,38 @@ class TimelineDomainIntegrationTest {
         assertThatThrownBy(() -> timelineService.changeProgress(projectId, 50, actor))
                 .isInstanceOfSatisfying(ApiException.class,
                         error -> assertThat(error.code()).isEqualTo(ErrorCode.TIMELINE_NOT_FOUND));
+    }
+
+    @Test
+    void horizonHeadersAndWriteBoundaryAgree() throws Exception {
+        UUID project = UUID.randomUUID();
+        stubAccess(project, true, "ACTIVE");
+        var auth = jwt().jwt(jwt -> jwt
+                .subject(actorId.toString())
+                .claim("username", actor.username())
+                .claim("fullName", actor.fullName())
+                .claim("roles", java.util.List.of("USER")))
+                .authorities(new SimpleGrantedAuthority("ROLE_USER"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/holidays").with(auth))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Holiday-Coverage-Start", "2025-01-01"))
+                .andExpect(header().string("X-Holiday-Coverage-End", "2027-12-31"));
+
+        var created = timelineService.create(project,
+                new CreateTimelineRequest(LocalDate.of(2027, 12, 31), LocalDate.of(2027, 12, 31),
+                        UUID.randomUUID(), null),
+                actor);
+        assertThat(created.version().durationWorkdays()).isEqualTo(1);
+    }
+
+    @Test
+    void publishesGeneratedOpenApiDocument() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"openapi\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("/api/v1/projects/{projectId}/timeline")));
     }
 
     @Test

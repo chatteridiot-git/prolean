@@ -9,7 +9,7 @@ public class TimelineServiceProperties {
 
     private String baseUrl = "http://localhost:8082";
     private String internalKeyId = "timeline-service-2026-10";
-    private String internalApiKey = "dev-timeline-service-key";
+    private String internalApiKey = "dev-timeline-service-key-0123456789abcdef";
 
     public String getBaseUrl() {
         return baseUrl;

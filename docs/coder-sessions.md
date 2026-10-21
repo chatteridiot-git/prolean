@@ -2,7 +2,7 @@
 
 Each session is scoped to keep the coder within its step budget and to produce a reviewable increment. A session is complete only when its listed tests/build commands pass.
 
-## Session 1 — M1 workspace foundation (running)
+## Session 1 — M1 workspace foundation (complete)
 
 Scope: parent POM, four modules, shared cross-cutting code, Flyway skeletons, Compose/PostgreSQL init, README, build verification.
 
@@ -80,3 +80,16 @@ Scope:
 - Fix all `@code-reviewer` findings and re-run evidence.
 
 Exit evidence: `docker compose up -d --build` reaches healthy state; smoke script passes; all gates green; review report has no open Critical/High findings.
+
+## Verification evidence (21 October 2026)
+
+- Backend: `cd coding/backend && mvn -B clean verify` -> BUILD SUCCESS. 216 tests (common 34, auth 53, user 48, task 25, timeline 56), 0 failures/errors.
+- Backend review regressions: disabled users are denied internal access; timeline status/progress/cancel paths re-check access before commit; holiday coverage now uses whole calendar years (2025-01-01..2027-12-31) on both the read and write paths; CORS exposes the horizon headers; page-flow, conflict, OpenAPI path, cookie-clearing, JWT-claim and cross-database tests pass.
+- JaCoCo: every module reported `All coverage checks have been met` (100% lines on the gated business packages; calculator branch gate met).
+- PIT: timeline `WorkingDayCalculator` -> 17 mutations, 16 killed, mutation score 94%, line-coverage gate met.
+- Frontend: `npx vitest run --coverage` -> 14 files / 84 tests passed; statements 100%, branches 94.96%, functions 100%, lines 100%; per-directory thresholds met. Page flows cover archived read-only views, holiday horizon, history pagination, conflict recovery and idempotency retry.
+- Frontend static checks: `npm run lint` -> 0 errors (2 fast-refresh warnings); `npm run build` -> success.
+- Containers: `docker compose -f coding/deploy/docker-compose.yml up -d --build` -> postgres, auth, user, task, timeline and frontend all healthy.
+- Smoke: `bash coding/deploy/smoke.sh` -> all 7 steps passed (login, project create/replay, list, task create, timeline publish/revision publish).
+- Cross-database isolation: `bash coding/scripts/db-check.sh` -> all checks passed.
+- OpenAPI: generated documents verified by integration tests in all four services; runtime docs remain gated by `OPENAPI_ENABLED` and are disabled in Compose.
