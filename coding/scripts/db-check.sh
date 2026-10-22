@@ -1,74 +1,95 @@
 #!/usr/bin/env bash
-# Verifies the Compose PostgreSQL isolation contract:
-#   * each service role can connect to its own database
-#   * each service role is denied on every other service database
+# Verifies the database isolation required by design section 13.3:
+# each service role can connect to its own database and is denied on the other three.
 #
-# Run from coding/ or any directory: coding/scripts/db-check.sh
-set -euo pipefail
+# Defaults match the Compose stack (PostgreSQL published on localhost:5432, one role per
+# service whose password equals the role name). Override with PGHOST, PGPORT, and the
+# per-role AUTH_DB_PASSWORD / USER_DB_PASSWORD / TASK_DB_PASSWORD / TIMELINE_DB_PASSWORD.
+set -uo pipefail
 
-cd "$(dirname "$0")/.."
+PGHOST="${PGHOST:-localhost}"
+PGPORT="${PGPORT:-5432}"
+PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-5}"
 
-AUTH_PW="${AUTH_DB_PASSWORD:-auth_service}"
-USER_PW="${USER_DB_PASSWORD:-user_service}"
-TASK_PW="${TASK_DB_PASSWORD:-task_service}"
-TIMELINE_PW="${TIMELINE_DB_PASSWORD:-timeline_service}"
+ROLES="auth_service user_service task_service timeline_service"
+DATABASES="auth_db user_db task_db timeline_db"
 
-compose() {
-  docker compose -f deploy/docker-compose.yml "$@"
+password_for() {
+  case "$1" in
+    auth_service) printf '%s' "${AUTH_DB_PASSWORD:-auth_service}" ;;
+    user_service) printf '%s' "${USER_DB_PASSWORD:-user_service}" ;;
+    task_service) printf '%s' "${TASK_DB_PASSWORD:-task_service}" ;;
+    timeline_service) printf '%s' "${TIMELINE_DB_PASSWORD:-timeline_service}" ;;
+    *) printf '%s' "$1" ;;
+  esac
 }
 
-if ! compose ps postgres --status running --format '{{.Name}}' | grep -q .; then
-  echo "postgres is not running; start the Compose stack first" >&2
-  exit 1
+database_for() {
+  case "$1" in
+    auth_service) printf '%s' auth_db ;;
+    user_service) printf '%s' user_db ;;
+    task_service) printf '%s' task_db ;;
+    timeline_service) printf '%s' timeline_db ;;
+    *) printf '%s' '' ;;
+  esac
+}
+
+if ! command -v psql >/dev/null 2>&1; then
+  echo "FAIL: psql is not installed or not on PATH" >&2
+  exit 2
 fi
 
-can_connect() {
-  local role="$1" password="$2" database="$3"
-  compose exec -T -e PGPASSWORD="$password" postgres \
-    psql -h 127.0.0.1 -U "$role" -d "$database" -v ON_ERROR_STOP=1 -q -c 'select 1' \
-    >/dev/null 2>&1
+run_psql() {
+  # $1 = role, $2 = database, $3 = SQL statement
+  PGPASSWORD="$(password_for "$1")" PGCONNECT_TIMEOUT="$PGCONNECT_TIMEOUT" LC_ALL=C \
+    psql --no-psqlrc --quiet --no-align --tuples-only \
+      --host "$PGHOST" --port "$PGPORT" --username "$1" --dbname "$2" \
+      --command "$3" 2>&1
 }
 
-check_allowed() {
-  local role="$1" password="$2" database="$3"
-  if ! can_connect "$role" "$password" "$database"; then
-    echo "FAIL: $role cannot connect to its database $database" >&2
-    exit 1
-  fi
-  echo "ok: $role -> $database"
-}
+checks=0
+failures=0
 
-check_denied() {
-  local role="$1" password="$2" database="$3"
-  if can_connect "$role" "$password" "$database"; then
-    echo "FAIL: $role unexpectedly connected to $database" >&2
-    exit 1
-  fi
-  echo "ok: $role denied on $database"
-}
+echo "Checking database isolation on ${PGHOST}:${PGPORT}"
 
-check_allowed auth_service "$AUTH_PW" auth_db
-check_allowed user_service "$USER_PW" user_db
-check_allowed task_service "$TASK_PW" task_db
-check_allowed timeline_service "$TIMELINE_PW" timeline_db
+for role in $ROLES; do
+  owned="$(database_for "$role")"
+  for db in $DATABASES; do
+    checks=$((checks + 1))
+    result="$(run_psql "$role" "$db" 'SELECT current_database();')"
+    status=$?
+    # Keep failure output on a single line.
+    result="$(printf '%s' "$result" | tr '\n' ' ')"
 
-for database in auth_db user_db task_db timeline_db; do
-  case "$database" in
-    auth_db) own=auth_service; own_pw="$AUTH_PW" ;;
-    user_db) own=user_service; own_pw="$USER_PW" ;;
-    task_db) own=task_service; own_pw="$TASK_PW" ;;
-    timeline_db) own=timeline_service; own_pw="$TIMELINE_PW" ;;
-  esac
-  for role in auth_service user_service task_service timeline_service; do
-    [ "$role" = "$own" ] && continue
-    case "$role" in
-      auth_service) pw="$AUTH_PW" ;;
-      user_service) pw="$USER_PW" ;;
-      task_service) pw="$TASK_PW" ;;
-      timeline_service) pw="$TIMELINE_PW" ;;
-    esac
-    check_denied "$role" "$pw" "$database"
+    if [ "$db" = "$owned" ]; then
+      if [ "$status" -eq 0 ] && [ "$result" = "$db" ]; then
+        printf 'ok   %-16s -> %-12s own database\n' "$role" "$db"
+      else
+        printf 'FAIL %-16s -> %-12s expected success, got: %s\n' "$role" "$db" "$result" >&2
+        failures=$((failures + 1))
+      fi
+    else
+      case "$result" in
+        *"permission denied for database"*)
+          if [ "$status" -ne 0 ]; then
+            printf 'ok   %-16s -/-> %-12s denied\n' "$role" "$db"
+          else
+            printf 'FAIL %-16s -/-> %-12s connected despite denial message\n' "$role" "$db" >&2
+            failures=$((failures + 1))
+          fi
+          ;;
+        *)
+          printf 'FAIL %-16s -/-> %-12s expected denial, got: %s\n' "$role" "$db" "$result" >&2
+          failures=$((failures + 1))
+          ;;
+      esac
+    fi
   done
 done
 
-echo "Cross-database isolation verified."
+if [ "$failures" -ne 0 ]; then
+  echo "FAILED: ${failures} of ${checks} database isolation checks did not behave as expected" >&2
+  exit 1
+fi
+
+echo "PASSED: ${checks} checks, every role reaches only its own database"

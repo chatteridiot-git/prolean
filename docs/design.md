@@ -1,4 +1,4 @@
-# ProLean Technical Design (approved v1.1)
+# xProLean Technical Design (approved v1.1)
 
 > This Markdown file is a text extraction of the approved Word document (`ProLean_Technical_Design_Document.docx`, v1.1-draft, 20 October 2026). The DOCX/PDF remain authoritative. Diagrams are in `docs/diagrams/` and are embedded in the DOCX/PDF.
 
