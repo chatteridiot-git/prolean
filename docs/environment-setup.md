@@ -1,4 +1,4 @@
-# xProLean Development Environment Setup
+# ProLean Development Environment Setup
 
 **Date:** 2026-10-19
 **Host:** Windows 11 + WSL2

@@ -1,0 +1,538 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="ProgId" content="Word.Document">
+  <meta name="Generator" content="Microsoft Word 15">
+  <meta name="Originator" content="Microsoft Word 15">
+  <title>ProLean Deployment Manual</title>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; font-size: 11.0pt; color: #111111; }
+    h1 { font-family: Calibri, Arial, sans-serif; font-size: 22.0pt; font-weight: bold; color: #1f2937; margin-bottom: 10pt; }
+    h2 { font-family: Calibri, Arial, sans-serif; font-size: 16.0pt; font-weight: bold; color: #1f2937; margin-top: 20pt; margin-bottom: 8pt; page-break-before: always; }
+    h2.first { page-break-before: avoid; }
+    h3 { font-family: Calibri, Arial, sans-serif; font-size: 13.0pt; font-weight: bold; color: #1f2937; margin-top: 14pt; margin-bottom: 6pt; }
+    p { font-family: Calibri, Arial, sans-serif; font-size: 11.0pt; margin-top: 5pt; margin-bottom: 5pt; }
+    table { border-collapse: collapse; width: 100%; font-family: Calibri, Arial, sans-serif; font-size: 10.0pt; margin-top: 8pt; margin-bottom: 10pt; }
+    th { border: 1px solid #9ca3af; padding: 5pt 8pt; background: #f3f4f6; text-align: left; vertical-align: top; }
+    td { border: 1px solid #9ca3af; padding: 5pt 8pt; vertical-align: top; }
+    code { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; color: #111111; }
+    pre { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; color: #111111; background: #f9fafb; border: 1px solid #d1d5db; padding: 8pt; white-space: pre-wrap; margin-top: 6pt; margin-bottom: 8pt; }
+    blockquote { font-size: 11.0pt; color: #6b7280; margin: 8pt 0 8pt 18pt; }
+    .note { color: #92400e; }
+    .todo { color: #dc2626; }
+  </style>
+</head>
+
+<body>
+
+<h1>ProLean Deployment Manual</h1>
+
+<p>
+  This document contains the detailed steps to build, package, deploy, and verify the
+  ProLean project-management application.
+</p>
+
+<p>
+  The deployment path described here is Docker Compose. It starts PostgreSQL, the four Spring Boot
+  services, and the React frontend inside Docker containers.
+</p>
+
+<p>
+  <b>Date:</b> 22 October 2026<br>
+  <b>Codebase:</b> <code>/mnt/d/Ai/opencode-projects/prolean</code>
+</p>
+
+<h2 class="first">Section 1 — Preconditions</h2>
+
+<p>
+  Use this section before starting the application. These checks confirm that all required tools and
+  services are installed and running on your local machine.
+</p>
+
+<h3>1.1 Required tools and versions</h3>
+
+<table>
+  <tr>
+    <th>Tool</th>
+    <th>Minimum version</th>
+    <th>Command</th>
+    <th>Expected result</th>
+  </tr>
+  <tr>
+    <td>OpenJDK</td>
+    <td>21</td>
+    <td><code>java -version</code></td>
+    <td>Reports an <code>openjdk version "21"</code> or later string.</td>
+  </tr>
+  <tr>
+    <td>Apache Maven</td>
+    <td>3.9+</td>
+    <td><code>mvn -version</code></td>
+    <td>Reports <code>Apache Maven 3.9.*</code> or later.</td>
+  </tr>
+  <tr>
+    <td>Node.js</td>
+    <td>22+</td>
+    <td><code>node --version</code></td>
+    <td>Reports <code>v22.*.*</code> or later.</td>
+  </tr>
+  <tr>
+    <td>npm</td>
+    <td>10+</td>
+    <td><code>npm --version</code></td>
+    <td>Reports <code>10.*.*</code> or later.</td>
+  </tr>
+  <tr>
+    <td>Docker Engine</td>
+    <td>29+</td>
+    <td><code>docker --version</code></td>
+    <td>Reports <code>Docker version 29.*</code> or later.</td>
+  </tr>
+  <tr>
+    <td>Docker Compose</td>
+    <td>v2 / v5</td>
+    <td><code>docker compose version</code></td>
+    <td>Returns a valid Docker Compose version string.</td>
+  </tr>
+  <tr>
+    <td>Git</td>
+    <td>2.30+</td>
+    <td><code>git --version</code></td>
+    <td>Reports a Git version.</td>
+  </tr>
+  <tr>
+    <td>curl</td>
+    <td>7.68+</td>
+    <td><code>curl --version</code></td>
+    <td>Returns a valid curl version.</td>
+  </tr>
+  <tr>
+    <td>jq</td>
+    <td>1.6+</td>
+    <td><code>jq --version</code></td>
+    <td>Returns a valid jq version.</td>
+  </tr>
+  <tr>
+    <td>bash</td>
+    <td>5</td>
+    <td><code>bash --version</code></td>
+    <td>Returns a valid bash version.</td>
+  </tr>
+</table>
+
+<h3>1.2 Runtime readiness</h3>
+
+<p>
+  Run this command to confirm the Docker daemon is actually running:
+</p>
+
+<pre>docker info</pre>
+
+<p>
+  <b>Expected:</b> a normal Docker status report, for example:
+</p>
+
+<pre>
+Client:
+ Version: 29.9.1
+...
+Server:
+ Container Engine: docker
+...</pre>
+
+<p class="note">
+  <b>If this command fails:</b> start Docker Desktop manually on Windows. Wait until the Docker
+  engine is running and then retry <code>docker info</code> before continuing.
+</p>
+
+<h3>1.3 Confirm Docker Compose is available</h3>
+
+<pre>docker compose version</pre>
+
+<p><b>Expected:</b></p>
+
+<pre>Docker Compose version v2...</pre>
+
+<h3>1.4 Required application files</h3>
+
+<p>
+  Confirm these files and folders are present inside the repository at
+  <code>/mnt/d/Ai/opencode-projects/prolean</code>:
+</p>
+
+<table>
+  <tr>
+    <th>Path</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td><code>coding/backend</code></td>
+    <td>The four Spring Boot service source trees.</td>
+  </tr>
+  <tr>
+    <td><code>coding/frontend</code></td>
+    <td>The React + TypeScript + Vite frontend.</td>
+  </tr>
+  <tr>
+    <td><code>coding/deploy/docker-compose.yml</code></td>
+    <td>The Compose deployment definition.</td>
+  </tr>
+  <tr>
+    <td><code>coding/deploy/.env.example</code></td>
+    <td>The local development environment template.</td>
+  </tr>
+  <tr>
+    <td><code>coding/deploy/smoke.sh</code></td>
+    <td>The end-to-end smoke test script.</td>
+  </tr>
+  <tr>
+    <td><code>coding/scripts/db-check.sh</code></td>
+    <td>The cross-database isolation check script.</td>
+  </tr>
+</table>
+
+<h3>1.5 Confirm the repository is clean</h3>
+
+<pre>git status --short --branch</pre>
+
+<p>
+  <b>Expected:</b> a clean working tree. Before deploying, this should show the branch name and
+  <b>no changed/untracked files</b>.
+</p>
+
+<pre>## main...origin/main
+</pre>
+
+<p>
+  This confirms the deployment is using committed, reproducible code. Do not deploy from a working
+  tree with pending changes if you want the deployment to be reproducible.
+</p>
+
+<h3>1.6 Confirm the application has not already been deployed</h3>
+
+<pre>docker ps --format '{{.Names}}\t{{.Status}}' | grep -E 'deploy-|prolean-'</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<ul>
+  <li>either no output, or</li>
+  <li>if containers are already running, they should all show <code>(healthy)</code>.</li>
+</ul>
+
+<p>
+  If you want a completely fresh deployment, run <code>docker compose down -v</code> inside the
+  <code>coding/deploy</code> directory first. If you are only updating the application, you do not
+  need to remove data.
+</p>
+
+<h2>Section 2 — Deployment</h2>
+
+<p>
+  Perform these steps from the repository root:
+</p>
+
+<pre>/mnt/d/Ai/opencode-projects/prolean</pre>
+
+<h3>2.1 Build and test the backend</h3>
+
+<p>
+  Open a terminal in the repository root and run:
+</p>
+
+<pre>cd coding/backend
+mvn -B clean verify</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<pre>[INFO] BUILD SUCCESS</pre>
+
+<p>
+  This compiles and tests all four backend services. It also runs:
+</p>
+
+<ul>
+  <li>JaCoCo coverage checks</li>
+  <li>Testcontainers PostgreSQL tests</li>
+  <li>PIT mutation coverage for the working-day calculator</li>
+  <li>service-level contract tests</li>
+</ul>
+
+<p class="todo">
+  <b>If this step fails:</b> resolve the test or compilation problem before deploying. Do not attempt
+  to deploy an application that has failed compile or tests.
+</p>
+
+<h3>2.2 Build the backend Docker-ready artifacts</h3>
+
+<pre>mvn -B -DskipTests package</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<pre>[INFO] BUILD SUCCESS</pre>
+
+<p>
+  This packages the four service jars into:
+</p>
+
+<ul>
+  <li><code>coding/backend/auth-service/target/auth-service-1.0.0-SNAPSHOT.jar</code></li>
+  <li><code>coding/backend/user-service/target/user-service-1.0.0-SNAPSHOT.jar</code></li>
+  <li><code>coding/backend/task-service/target/task-service-1.0.0-SNAPSHOT.jar</code></li>
+  <li><code>coding/backend/timeline-service/target/timeline-service-1.0.0-SNAPSHOT.jar</code></li>
+</ul>
+
+<h3>2.3 Build and check the frontend</h3>
+
+<pre>cd ../frontend
+npm ci --legacy-peer-deps
+npm run build</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<ul>
+  <li><code>npm ci</code> completes without errors.</li>
+  <li><code>npm run build</code> produces the production frontend bundle.</li>
+</ul>
+
+<p>
+  You may optionally also run:
+</p>
+
+<pre>npm run lint
+npm run test:coverage</pre>
+
+<p class="note">
+  The frontend Docker build also rebuilds the frontend from source inside Docker. These host-side
+  commands are useful to catch problems before deployment.
+</p>
+
+<h3>2.4 Prepare the deployment environment</h3>
+
+<pre>cd ../deploy
+cp .env.example .env</pre>
+
+<p>
+  <b>Expected:</b> a local <code>.env</code> file is created from the template.
+</p>
+
+<p>
+  You can edit <code>.env</code> to change local development values, such as:
+</p>
+
+<ul>
+  <li><code>POSTGRES_PASSWORD</code></li>
+  <li><code>BOOTSTRAP_ADMIN_USERNAME</code></li>
+  <li><code>BOOTSTRAP_ADMIN_PASSWORD</code></li>
+  <li>CORS origins</li>
+  <li>Docker service ports</li>
+</ul>
+
+<p class="note">
+  <b>Never commit .env</b>. It contains deployment-specific values and is intentionally ignored by
+  Git.
+</p>
+
+<h3>2.5 Start the full deployment</h3>
+
+<pre>docker compose up -d --build</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<ul>
+  <li>Docker builds the four backend service images.</li>
+  <li>Docker builds the frontend image.</li>
+  <li>All six containers are created and started.</li>
+  <li>PostgreSQL becomes healthy first.</li>
+  <li>auth-service, user-service, task-service, timeline-service, and frontend become healthy.</li>
+</ul>
+
+<p>
+  You can watch the deployment progress with:
+</p>
+
+<pre>docker compose ps</pre>
+
+<p class="note">
+  On a slower laptop this can take five to ten minutes. Wait patiently.
+</p>
+
+<h3>2.6 Verify the deployment is healthy</h3>
+
+<pre>docker compose ps</pre>
+
+<p>
+  <b>Expected:</b> all six containers show <code>Up</code> and <code>(healthy)</code>, for example:
+</p>
+
+<pre>
+deploy-auth-service-1   Up (healthy)
+deploy-user-service-1   Up (healthy)
+deploy-task-service-1   Up (healthy)
+deploy-timeline-service-1 Up (healthy)
+prolean-frontend        Up (healthy)
+prolean-postgres        Up (healthy)</pre>
+
+<h3>2.7 Confirm the frontend is reachable</h3>
+
+<p>
+  Open a browser and go to:
+</p>
+
+<pre>http://localhost:8080</pre>
+
+<p>
+  You should see the ProLean login screen.
+</p>
+
+<h3>2.8 Log in to the application</h3>
+
+<p>
+  Use the bootstrap administrator credentials from the local <code>.env</code> file:
+</p>
+
+<table>
+  <tr>
+    <th>Username</th>
+    <th>Password</th>
+  </tr>
+  <tr>
+    <td><code>admin</code></td>
+    <td><code>ChangeMe123!</code></td>
+  </tr>
+</table>
+
+<p class="note">
+  These are development defaults. Never use them in a real deployment. Change
+  <code>BOOTSTRAP_ADMIN_PASSWORD</code> in <code>.env</code> before any non-local deployment.
+</p>
+
+<h3>2.9 Run the smoke test</h3>
+
+<pre>./smoke.sh</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<pre>1/7 login
+2/7 current user
+3/7 create project (and replay)
+4/7 list projects
+5/7 create task
+6/7 create and publish timeline
+7/7 revise and publish revision
+Smoke passed</pre>
+
+<h3>2.10 Verify database isolation</h3>
+
+<pre>cd ..
+./scripts/db-check.sh</pre>
+
+<p>
+  <b>Expected:</b>
+</p>
+
+<pre>ok: auth_service -> auth_db
+ok: user_service -> user_db
+ok: task_service -> task_db
+ok: timeline_service -> timeline_db
+Cross-database isolation verified.</pre>
+
+<h3>2.11 Optional: restart the application</h3>
+
+<pre>cd coding/deploy
+docker compose restart frontend
+docker compose restart auth-service
+docker compose restart user-service</pre>
+
+<p>
+  To restart the whole deployment:
+</p>
+
+<pre>docker compose down
+docker compose up -d</pre>
+
+<p class="note">
+  This preserves the Docker volume and database data between restarts.
+</p>
+
+<h3>2.12 Optional: stop the application</h3>
+
+<pre>cd coding/deploy
+docker compose down</pre>
+
+<p>
+  To stop the deployment and remove the database volume:
+</p>
+
+<pre>docker compose down -v</pre>
+
+<h3>2.13 Production notes</h3>
+
+<p>
+  Before any non-local or production deployment, override these values:
+</p>
+
+<ul>
+  <li><code>POSTGRES_PASSWORD</code></li>
+  <li><code>BOOTSTRAP_ADMIN_PASSWORD</code></li>
+  <li>All <code>INTERNAL_KEY_*</code> values (minimum 32 characters)</li>
+  <li><code>AUTH_COOKIE_SECURE=true</code></li>
+  <li><code>OPENAPI_ENABLED=false</code></li>
+  <li>A real <code>JWT_PRIVATE_KEY_PEM</code> instead of an ephemeral local key</li>
+  <li>A CORS allow-list appropriate to your domain</li>
+</ul>
+
+<p class="note">
+  Do not expose the current development defaults to the internet.
+</p>
+
+<h3>2.14 Troubleshooting</h3>
+
+<p>If a service is not healthy, inspect its logs:</p>
+
+<pre>docker compose logs auth-service
+docker compose logs user-service
+docker compose logs task-service
+docker compose logs timeline-service
+docker compose logs frontend
+docker compose logs postgres</pre>
+
+<p>
+  A common cold-start issue is that auth-service was healthy before user-service became ready, so
+  the bootstrap administrator was not created. In that case:
+</p>
+
+<pre>docker compose restart auth-service</pre>
+
+<p>
+  Then check:
+</p>
+
+<pre>docker compose logs auth-service | grep 'Bootstrap ADMIN'</pre>
+
+<p>
+  The expected result contains:
+</p>
+
+<pre>Bootstrap ADMIN credential created for 'admin'</pre>
+
+<p class="note">
+  If the login continues to fail, confirm the credentials in the local <code>.env</code> file.
+</p>
+
+</body>
+</html>
