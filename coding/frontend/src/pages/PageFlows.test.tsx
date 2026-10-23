@@ -1,5 +1,5 @@
 import { App } from 'antd';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -234,6 +234,24 @@ describe('page flows', () => {
   it('shows the database-derived holiday horizon', () => {
     wrap(<HolidaysPage />);
     expect(screen.getByText('Covered horizon: 2025-01-01 to 2027-12-31')).toBeInTheDocument();
+  });
+
+  it('renders the version gantt on the timeline page while keeping history and conflicts intact', () => {
+    wrap(<TimelinePage />);
+    const group = screen.getByRole('group', { name: 'Timeline version gantt' });
+    expect(within(group).getAllByRole('img')).toHaveLength(2);
+    expect(
+      within(group).getByRole('img', { name: /^v1, Published, Open/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByRole('img', { name: /^v2, Draft/ }),
+    ).toBeInTheDocument();
+    // The Gantt reads a dedicated page-0 slice, independent of history paging.
+    expect(m.useTimelineVersions).toHaveBeenCalledWith('p1', 0);
+    expect(screen.getByText('Version history')).toBeInTheDocument();
+
+    // The draft conflict controls still work: publish is reachable from the draft card.
+    expect(screen.getByRole('button', { name: /publish/i })).toBeEnabled();
   });
 
   it('shows expected and current timestamps and reapplies after a publish conflict', async () => {

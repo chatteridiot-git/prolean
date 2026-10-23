@@ -312,3 +312,111 @@ body {
     display: none;
   }
 }
+
+/* Timeline Gantt (version chart) */
+.timeline-gantt {
+  overflow-x: auto;
+  border-radius: 6px;
+}
+
+.timeline-gantt:focus {
+  outline: 2px solid var(--prolean-teal);
+  outline-offset: 2px;
+}
+
+.timeline-gantt-grid {
+  min-width: 720px;
+}
+
+.timeline-gantt-row {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(16, 42, 42, 0.08);
+}
+
+.timeline-gantt-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.timeline-gantt-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+  display: grid;
+  gap: 2px;
+}
+
+.timeline-gantt-label-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.timeline-gantt-label-title .ant-tag {
+  margin-inline-end: 0;
+}
+
+.timeline-gantt-label-meta {
+  color: var(--prolean-muted);
+}
+
+.timeline-gantt-track {
+  position: relative;
+  height: 28px;
+  background: rgba(15, 118, 110, 0.07);
+  border-radius: 6px;
+}
+
+.timeline-gantt-bar {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  min-width: 24px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.timeline-gantt-bar:focus {
+  outline: 2px solid var(--prolean-ink);
+  outline-offset: 1px;
+}
+
+.timeline-gantt-bar-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.timeline-gantt-bar-published {
+  background: #237804;
+}
+
+.timeline-gantt-bar-draft {
+  background: #873800;
+}
+
+.timeline-gantt-bar-superseded {
+  background: #595959;
+}
+
+.timeline-gantt-bar-cancelled {
+  background: #a8071a;
+}
+
+.timeline-gantt-bar-current {
+  box-shadow: 0 0 0 2px var(--prolean-ink);
+}
+
+.timeline-gantt-empty {
+  margin-bottom: 0;
+}

@@ -10,6 +10,7 @@ import {
   Modal,
   Row,
   Select,
+  Skeleton,
   Space,
   Table,
   Tag,
@@ -17,6 +18,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
+  BarsOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   EditOutlined,
@@ -29,6 +31,7 @@ import { AsyncState } from '@/components/AsyncState';
 import { PageHeader } from '@/components/PageHeader';
 import { PercentBar } from '@/components/PercentBar';
 import { StatusTag } from '@/components/StatusTag';
+import { TimelineGantt } from '@/components/TimelineGantt';
 import {
   useCancelTimelineDraft,
   useChangeTimelineProgress,
@@ -55,6 +58,8 @@ export function TimelinePage() {
   const timelineQuery = useTimeline(project.id);
   const [historyPage, setHistoryPage] = useState(0);
   const versionsQuery = useTimelineVersions(project.id, historyPage);
+  // Dedicated page-0 slice for the Gantt, independent of the history table's page state.
+  const ganttVersionsQuery = useTimelineVersions(project.id, 0);
   const createTimeline = useCreateTimeline(project.id);
   const editDraft = useEditTimelineDraft(project.id);
   const cancelDraft = useCancelTimelineDraft(project.id);
@@ -524,6 +529,34 @@ export function TimelinePage() {
                 </Card>
               </Col>
             </Row>
+
+            <Card
+              title={
+                <Space>
+                  <BarsOutlined />
+                  <span>Timeline gantt</span>
+                </Space>
+              }
+              extra={
+                <Typography.Text type="secondary">Up to 10 versions</Typography.Text>
+              }
+              className="section-gap"
+            >
+              {ganttVersionsQuery.error ? (
+                <Alert
+                  type="error"
+                  showIcon
+                  message={problemMessage(ganttVersionsQuery.error)}
+                />
+              ) : ganttVersionsQuery.isLoading ? (
+                <Skeleton active title={false} paragraph={{ rows: 3 }} />
+              ) : (
+                <TimelineGantt
+                  versions={ganttVersionsQuery.data?.content ?? []}
+                  currentVersionId={current?.id}
+                />
+              )}
+            </Card>
 
             <Card
               title={

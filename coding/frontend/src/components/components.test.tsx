@@ -5,6 +5,7 @@ import { AsyncState, ProblemAlert } from '@/components/AsyncState';
 import { PageHeader } from '@/components/PageHeader';
 import { PercentBar } from '@/components/PercentBar';
 import { StatusTag } from '@/components/StatusTag';
+import type { ProjectStatus } from '@/types/api';
 
 function axiosError(data: Record<string, unknown>) {
   return { isAxiosError: true, response: { status: 409, data } };
@@ -30,6 +31,11 @@ describe('shared components', () => {
       expect(container.textContent).toBeTruthy();
       unmount();
     }
+  });
+
+  it('falls back to the raw value for unknown statuses', () => {
+    render(<StatusTag value={'UNKNOWN' as ProjectStatus} />);
+    expect(screen.getByText('UNKNOWN')).toBeInTheDocument();
   });
 
   it('renders page headers with and without subtitle and actions', () => {

@@ -18,4 +18,4 @@ Design solutions and unit tests adhering strictly to the project tech stack spec
 6. Define calculation logic for Task/Timeline durations and Timeline % plan completion (`100% / duration days`), excluding weekends and Indonesian public holidays.
 7. Formulate a robust versioning strategy for Timelines.
 8. Generate a technical documentation file in `.md` format with file name `design.md` saved directly in `docs/`. Include Sequence Diagrams, API Specifications, ERD, Architecture Diagram, Holiday Calendar handling, and Test Strategy.
-9. Apply feedback from `@design-reviewer` when requested to refactor or fix reported issues.
+10. Apply feedback from `@design-reviewer` when requested to refactor or fix reported issues.
